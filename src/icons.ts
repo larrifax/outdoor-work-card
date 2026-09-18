@@ -5,7 +5,7 @@ type Icon = (size?: number) => TemplateResult;
 const wrap = (paths: TemplateResult, s: number) =>
   svg`<svg width=${s} height=${s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 
-export const icons: Record<string, Icon> = {
+export const icons = {
   wrench: (s = 20) =>
     wrap(
       svg`<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.9-.6-.6-2.9 2.5-2.5Z"/>`,
@@ -47,7 +47,7 @@ export const icons: Record<string, Icon> = {
     wrap(svg`<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6h.01"/>`, s),
   alert: (s = 16) =>
     wrap(svg`<path d="M12 3l10 18H2z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>`, s),
-};
+} satisfies Record<string, Icon>;
 
 /** Pick an icon for a task by name; falls back to a generic check. */
 export function taskIcon(name: string): Icon {

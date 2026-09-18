@@ -36,7 +36,7 @@ declare global {
 
 @customElement("outdoor-work-card")
 export class OutdoorWorkCard extends LitElement {
-  static styles = styles;
+  static override styles = styles;
 
   @property({ attribute: false }) public hass?: HassLike;
 
@@ -78,21 +78,21 @@ export class OutdoorWorkCard extends LitElement {
 
   // ---- lifecycle ----------------------------------------------------------
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     this._tickTimer = window.setInterval(() => (this._tick = (this._tick + 1) % 1e6), 5 * 60_000);
     document.addEventListener("visibilitychange", this._onVisible);
     this._maybeLoad(false);
   }
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     if (this._tickTimer) clearInterval(this._tickTimer);
     document.removeEventListener("visibilitychange", this._onVisible);
   }
 
-  protected updated(changed: PropertyValues): void {
+  protected override updated(changed: PropertyValues): void {
     if (changed.has("hass") && !this._weather && !this._loading) this._maybeLoad(false);
   }
 
@@ -136,7 +136,7 @@ export class OutdoorWorkCard extends LitElement {
 
   // ---- render -------------------------------------------------------------
 
-  protected render(): TemplateResult | typeof nothing {
+  protected override render(): TemplateResult | typeof nothing {
     const r = this._r;
     if (!r) return nothing;
     void this._tick;
@@ -203,7 +203,7 @@ export class OutdoorWorkCard extends LitElement {
     let verdict: string;
     if (allTonight) verdict = "Go tonight";
     else if (anyTonight)
-      verdict = `Go tonight · ${res.tonightOk.map((k) => r.tasks[k].name.toLowerCase()).join(", ")} only`;
+      verdict = `Go tonight · ${res.tonightOk.map((k) => r.tasks[k]!.name.toLowerCase()).join(", ")} only`;
     else if (today?.passed) verdict = "Today's window has passed";
     else verdict = "Not tonight";
 
@@ -214,7 +214,7 @@ export class OutdoorWorkCard extends LitElement {
       <div class="hero ${heroCls}">
         <div class="pill"><span class="dot"></span>${verdict}</div>
         ${r.tasks.map((t, k) => {
-          const v = res.tasks[k];
+          const v = res.tasks[k]!;
           const nd = v.nextIdx >= 0 ? res.days[v.nextIdx] : undefined;
           const ld = v.longestIdx >= 0 ? res.days[v.longestIdx] : undefined;
           const need =
@@ -335,8 +335,8 @@ export class OutdoorWorkCard extends LitElement {
       days: r.days,
       leadHours: r.leadHours,
     });
-    const best = res.days[res.bestIdx];
-    const today = res.days[0];
+    const best = res.days[res.bestIdx]!;
+    const today = res.days[0]!;
     const ok = res.bestIdx === 0 && best.streak > 0;
     const none = best.streak === 0;
     const heroCls = ok ? "ok" : none ? "bad" : "bad";

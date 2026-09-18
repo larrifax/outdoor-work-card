@@ -38,8 +38,8 @@ export function buildDays(now: number, tz: string, count: number): DayBase[] {
     const dayStart = zonedToUtc(p.y, p.m, p.d, 0, 0, tz);
     out.push({
       key: p.key,
-      short: SHORT[p.wd],
-      full: FULL[p.wd],
+      short: SHORT[p.wd]!,
+      full: FULL[p.wd]!,
       dom: p.d,
       isToday: i === 0,
       isWeekend: p.wd === 0 || p.wd === 6,
@@ -105,7 +105,7 @@ export interface WorkResult {
 
 function lastRainBefore(hours: HourPoint[], t: number, thr: number): HourPoint | null {
   for (let i = hours.length - 1; i >= 0; i--) {
-    const h = hours[i];
+    const h = hours[i]!;
     if (h.t >= t) continue;
     if (h.mm > thr) return h;
   }
@@ -132,7 +132,7 @@ function rainWithin(hours: HourPoint[], a: number, b: number, thr: number): bool
 export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkResult {
   const base = buildDays(now, o.tz, o.days);
   const first = hours[0]?.t ?? now;
-  const last = hours.length ? hours[hours.length - 1].t + H : now;
+  const last = hours.length ? hours[hours.length - 1]!.t + H : now;
 
   const days: WorkDay[] = base.map((b) => {
     const p = localParts(b.dayStart + 12 * H, o.tz);
@@ -193,7 +193,7 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
     days.forEach((d, i) => {
       if (!d.ok[k]) return;
       if (nextIdx < 0) nextIdx = i;
-      if (longestIdx < 0 || d.hours > days[longestIdx].hours) longestIdx = i;
+      if (longestIdx < 0 || d.hours > days[longestIdx]!.hours) longestIdx = i;
     });
     return { name: t.name, nextIdx, longestIdx };
   });
@@ -296,11 +296,11 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   });
 
   const streakFrom = (s: number): { n: number; open: boolean } => {
-    if (!info[s].eveningTolerated) return { n: 0, open: false };
+    if (!info[s]!.eveningTolerated) return { n: 0, open: false };
     let n = 1;
     for (let j = s + 1; j < info.length; j++) {
-      if (!info[j].hasData) return { n, open: true };
-      if (!info[j].tolerated) return { n, open: false };
+      if (!info[j]!.hasData) return { n, open: true };
+      if (!info[j]!.tolerated) return { n, open: false };
       n++;
     }
     // Ran past the evaluated days without hitting rain: it's *at least* n.
@@ -308,7 +308,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   };
 
   const days: WashDay[] = base.slice(0, o.days).map((b, i) => {
-    const inf = info[i];
+    const inf = info[i]!;
     const st = streakFrom(i);
     let icon: WashIcon;
     if (inf.peak <= 0.05) icon = "sun";
@@ -330,7 +330,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
 
   let bestIdx = 0;
   days.forEach((d, i) => {
-    if (d.streak > days[bestIdx].streak) bestIdx = i;
+    if (d.streak > days[bestIdx]!.streak) bestIdx = i;
   });
 
   const t0 = streakFrom(0);

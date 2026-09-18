@@ -79,7 +79,7 @@ export function zonedToUtc(
 /** Parse "HH:MM" → minutes since midnight. Returns null when malformed. */
 export function parseHM(s: string | undefined, fallback: string): number {
   const str = (s && /^\d{1,2}:\d{2}(:\d{2})?$/.test(s) ? s : fallback).split(":");
-  return Math.min(23, +str[0]) * 60 + Math.min(59, +str[1]);
+  return Math.min(23, +str[0]!) * 60 + Math.min(59, +(str[1] ?? 0));
 }
 
 export function hm(ms: number, tz: string): string {

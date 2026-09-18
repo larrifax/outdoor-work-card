@@ -193,7 +193,7 @@ export class OutdoorWorkCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HassLike;
   @state() private _config?: CardConfig;
 
-  static styles = css`
+  static override styles = css`
     .note {
       font-size: 12px;
       color: var(--secondary-text-color);
@@ -241,10 +241,10 @@ export class OutdoorWorkCardEditor extends LitElement {
     );
   }
 
-  protected render(): TemplateResult | typeof nothing {
+  protected override render(): TemplateResult | typeof nothing {
     if (!this.hass || !this._config) return nothing;
     const data = { mode: "work", ...this._config } as Record<string, unknown>;
-    const isWork = data.mode !== "carwash";
+    const isWork = data["mode"] !== "carwash";
     return html`
       <ha-form
         .hass=${this.hass}
