@@ -244,7 +244,7 @@ export interface WashDay extends DayBase {
   tolerated: boolean;
   /** Evening onward is harmless (so you can wash then). */
   eveningTolerated: boolean;
-  /** Clean days you'd get washing this evening (0 = can't). */
+  /** Dry days after the wash day, assuming a dry garage overnight (-1 = can't wash). */
   streak: number;
   /** Streak ran to the end of the data — it's at least this long. */
   openEnded: boolean;
@@ -308,8 +308,9 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   });
 
   const streakFrom = (s: number): { n: number; open: boolean } => {
-    if (!info[s]!.eveningTolerated) return { n: 0, open: false };
-    let n = 1;
+    // Wash day itself isn't counted — the car is dry in the garage overnight.
+    if (!info[s]!.eveningTolerated) return { n: -1, open: false };
+    let n = 0;
     for (let j = s + 1; j < info.length; j++) {
       if (!info[j]!.hasData) return { n, open: true };
       if (!info[j]!.tolerated) return { n, open: false };
@@ -346,7 +347,8 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   });
 
   const t0 = streakFrom(0);
-  const todayBreakIdx = t0.open ? -1 : t0.n < base.length ? t0.n : -1;
+  const breakIdx = t0.n + 1; // wash day no longer counted, so the break sits one day later
+  const todayBreakIdx = t0.open ? -1 : breakIdx < base.length ? breakIdx : -1;
 
   return { days, bestIdx, todayBreakIdx };
 }

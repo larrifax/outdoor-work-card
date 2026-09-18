@@ -353,8 +353,8 @@ export class OutdoorWorkCard extends LitElement {
     });
     const best = res.days[res.bestIdx]!;
     const today = res.days[0]!;
-    const ok = res.bestIdx === 0 && best.streak > 0;
-    const none = best.streak === 0;
+    const ok = res.bestIdx === 0 && best.streak >= 0;
+    const none = best.streak < 0;
     const heroCls = ok ? "ok" : none ? "bad" : "bad";
     const verdict = ok ? t.washTonight : none ? t.noGoodEvening : t.skipToday;
     const dayLabel = ok ? t.tonight : none ? t.dash : best.full;
@@ -370,7 +370,7 @@ export class OutdoorWorkCard extends LitElement {
     } else if (none) {
       why = t.whyNone(r.okRain);
     } else {
-      const head = today.streak === 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
+      const head = today.streak < 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
       why = `${head}${brk ? t.whySpoils(describe(brk)) : "."}`;
     }
 
@@ -385,7 +385,7 @@ export class OutdoorWorkCard extends LitElement {
 
       <div class="sect">${t.sectAsk}</div>
       <div class="strip d${r.days}">
-        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak > 0, t, i))}
+        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak >= 0, t, i))}
       </div>
 
       <div class="foot">
@@ -433,7 +433,7 @@ export class OutdoorWorkCard extends LitElement {
           : d.peakNight
             ? t.whenNight
             : t.whenDaytime;
-    const out = d.streak === 0 ? t.dash : t.outDays(d.streak, d.openEnded);
+    const out = d.streak < 0 ? t.dash : t.outDays(d.streak, d.openEnded);
     return html` <div class="col ${classMap({ best: isBest, far: d.far })}">
       <span class="tag">${tag}</span>
       <span class="dn">${d.short}</span>
@@ -450,7 +450,7 @@ export class OutdoorWorkCard extends LitElement {
         @focus=${this._showTip}
         @blur=${this._hideTip}
       >
-        <span class=${d.streak === 0 ? "none" : ""}>${out}</span>
+        <span class=${d.streak < 0 ? "none" : ""}>${out}</span>
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-out-${i}` })}
           >${t.outTip(d.streak, d.openEnded)}</span
         >
