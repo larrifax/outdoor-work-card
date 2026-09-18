@@ -91,16 +91,16 @@ export function hoursBetween(a: number, b: number): number {
   return (b - a) / 3_600_000;
 }
 
-/** "2h11" style duration label. */
-export function durLabel(hours: number): string {
+/** "2h11" style duration label. `unit` is the hour marker ("h" / "t"). */
+export function durLabel(hours: number, unit = "h"): string {
   if (hours <= 0) return "—";
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
-  return m === 60 ? `${h + 1}h00` : `${h}h${String(m).padStart(2, "0")}`;
+  return m === 60 ? `${h + 1}${unit}00` : `${h}${unit}${String(m).padStart(2, "0")}`;
 }
 
 /** "31 h" / "48 h+" */
-export function hLabel(hours: number, cap: number): string {
-  if (hours >= cap) return `${cap} h+`;
-  return `${Math.round(hours)} h`;
+export function hLabel(hours: number, cap: number, unit = "h"): string {
+  if (hours >= cap) return `${cap} ${unit}+`;
+  return `${Math.round(hours)} ${unit}`;
 }
