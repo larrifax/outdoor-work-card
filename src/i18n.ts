@@ -107,7 +107,7 @@ export interface Strings {
   whySpoils: (describe: string) => string;
   describe: (full: string, night: boolean, peak: string) => string;
   sectAsk: string;
-  sectHint: string;
+  outTip: (streak: number, open: boolean) => string;
   tagTonight: string;
   tagBest: string;
   tagNow: string;
@@ -195,17 +195,26 @@ const EN: Strings = {
   skipToday: "Skip today",
   dash: "—",
   nothingClean: "nothing stays clean",
-  cleanDays: (n, open) => `${n}${open ? "+" : ""} clean ${n === 1 && !open ? "day" : "days"}`,
+  cleanDays: (n, open) =>
+    n === 0 && !open
+      ? "clean, but not past tomorrow"
+      : `${n}${open ? "+" : ""} clean ${n === 1 && !open ? "day" : "days"}`,
   whyOkBreak: (ws, desc) => `Dry from ${ws} tonight. Stays clean until ${desc}.`,
   whyOkNoRain: (ws) => `Dry from ${ws} tonight, and no spoiling rain in the whole outlook.`,
   whyNone: (okRain) =>
     `Every evening in the outlook is followed by rain above ${okRain} mm/h within a day.`,
   whySkipHeadRain: "Rain tonight rules out washing today",
-  whySkipHeadLasts: (n) => `A wash today lasts only ${n} ${n === 1 ? "day" : "days"}`,
+  whySkipHeadLasts: (n) =>
+    n === 0
+      ? `A wash today won't survive tomorrow`
+      : `A wash today lasts only ${n} ${n === 1 ? "day" : "days"}`,
   whySpoils: (desc) => ` — ${desc} spoils it.`,
   describe: (full, night, peak) => `${full}'s ${night ? "night" : "daytime"} rain (${peak} mm/h)`,
-  sectAsk: "Wash which evening?",
-  sectHint: "bottom row: clean days after",
+  sectAsk: "When to wash?",
+  outTip: (streak, open) =>
+    streak === 0 && !open
+      ? "No upcoming dry-weather streak"
+      : `${streak}${open ? "+" : ""} day${streak === 1 && !open ? "" : "s"} until next real rainfall`,
   tagTonight: "Tonight",
   tagBest: "Best",
   tagNow: "Now",
@@ -315,17 +324,26 @@ const NB: Strings = {
   skipToday: "Dropp i dag",
   dash: "—",
   nothingClean: "ingenting holder seg rent",
-  cleanDays: (n, open) => `${n}${open ? "+" : ""} rene ${n === 1 && !open ? "dag" : "dager"}`,
+  cleanDays: (n, open) =>
+    n === 0 && !open
+      ? "rent, men ikke forbi i morgen"
+      : `${n}${open ? "+" : ""} rene ${n === 1 && !open ? "dag" : "dager"}`,
   whyOkBreak: (ws, desc) => `Tørt fra ${ws} i kveld. Holder seg rent til ${desc}.`,
   whyOkNoRain: (ws) => `Tørt fra ${ws} i kveld, og ingen ødeleggende nedbør i hele varselet.`,
   whyNone: (okRain) => `Hver kveld i varselet følges av nedbør over ${okRain} mm/t innen et døgn.`,
   whySkipHeadRain: "Regn i kveld gjør vask i dag nytteløst",
-  whySkipHeadLasts: (n) => `En vask i dag varer bare ${n} ${n === 1 ? "dag" : "dager"}`,
+  whySkipHeadLasts: (n) =>
+    n === 0
+      ? `En vask i dag overlever ikke til i morgen`
+      : `En vask i dag varer bare ${n} ${n === 1 ? "dag" : "dager"}`,
   whySpoils: (desc) => ` — ${desc} ødelegger det.`,
   describe: (full, night, peak) =>
     `${night ? "nattregn" : "regn på dagen"} ${full.toLowerCase()} (${peak} mm/t)`,
-  sectAsk: "Vask hvilken kveld?",
-  sectHint: "nederste rad: rene dager etter",
+  sectAsk: "Når skal du vaske?",
+  outTip: (streak, open) =>
+    streak === 0 && !open
+      ? "Ingen kommende tørrværsperiode"
+      : `${streak}${open ? "+" : ""} ${streak === 1 && !open ? "dag" : "dager"} til neste ordentlige nedbør`,
   tagTonight: "I kveld",
   tagBest: "Best",
   tagNow: "Nå",

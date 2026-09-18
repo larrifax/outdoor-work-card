@@ -353,8 +353,8 @@ export class OutdoorWorkCard extends LitElement {
     });
     const best = res.days[res.bestIdx]!;
     const today = res.days[0]!;
-    const ok = res.bestIdx === 0 && best.streak > 0;
-    const none = best.streak === 0;
+    const ok = res.bestIdx === 0 && best.streak >= 0;
+    const none = best.streak < 0;
     const heroCls = ok ? "ok" : none ? "bad" : "bad";
     const verdict = ok ? t.washTonight : none ? t.noGoodEvening : t.skipToday;
     const dayLabel = ok ? t.tonight : none ? t.dash : best.full;
@@ -370,7 +370,7 @@ export class OutdoorWorkCard extends LitElement {
     } else if (none) {
       why = t.whyNone(r.okRain);
     } else {
-      const head = today.streak === 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
+      const head = today.streak < 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
       why = `${head}${brk ? t.whySpoils(describe(brk)) : "."}`;
     }
 
@@ -383,11 +383,9 @@ export class OutdoorWorkCard extends LitElement {
         <div class="why">${why}</div>
       </div>
 
-      <div class="sect">
-        <span class="l">${t.sectAsk}</span><span class="r">${t.sectHint}</span>
-      </div>
+      <div class="sect">${t.sectAsk}</div>
       <div class="strip d${r.days}">
-        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak > 0, t))}
+        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak >= 0, t, i))}
       </div>
 
       <div class="foot">
@@ -406,7 +404,25 @@ export class OutdoorWorkCard extends LitElement {
     `;
   }
 
-  private _washCol(d: WashDay, isBest: boolean, t: Strings): TemplateResult {
+  private _tipTimer?: ReturnType<typeof setTimeout>;
+  private _skipTimer?: ReturnType<typeof setTimeout>;
+  private _tipSkip = false;
+
+  private _showTip = (e: Event) => {
+    const tip = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(".tip");
+    clearTimeout(this._tipTimer);
+    clearTimeout(this._skipTimer);
+    this._tipTimer = setTimeout(() => tip?.togglePopover(true), this._tipSkip ? 0 : 600);
+  };
+
+  private _hideTip = (e: Event) => {
+    clearTimeout(this._tipTimer);
+    (e.currentTarget as HTMLElement).querySelector<HTMLElement>(".tip")?.togglePopover(false);
+    this._tipSkip = true;
+    this._skipTimer = setTimeout(() => (this._tipSkip = false), 300);
+  };
+
+  private _washCol(d: WashDay, isBest: boolean, t: Strings, i: number): TemplateResult {
     const tag = d.isToday && isBest ? t.tagTonight : isBest ? t.tagBest : d.isToday ? t.tagNow : "";
     const mm = d.peak <= 0.05 ? t.dry : t.mm(d.peak.toFixed(1));
     const when =
@@ -417,7 +433,7 @@ export class OutdoorWorkCard extends LitElement {
           : d.peakNight
             ? t.whenNight
             : t.whenDaytime;
-    const out = d.streak === 0 ? t.dash : t.outDays(d.streak, d.openEnded);
+    const out = d.streak < 0 ? t.dash : t.outDays(d.streak, d.openEnded);
     return html` <div class="col ${classMap({ best: isBest, far: d.far })}">
       <span class="tag">${tag}</span>
       <span class="dn">${d.short}</span>
@@ -425,7 +441,20 @@ export class OutdoorWorkCard extends LitElement {
       <div class="ic ${d.icon}">${icons[d.icon](d.icon === "drop" ? 16 : 20)}</div>
       <span class="mm ${d.tolerated ? "" : "bad"}">${mm}</span>
       <span class="when">${when}</span>
-      <div class="out"><span class=${d.streak === 0 ? "none" : ""}>${out}</span></div>
+      <div
+        class="out"
+        tabindex="0"
+        style=${styleMap({ "anchor-name": `--owc-out-${i}` })}
+        @pointerenter=${this._showTip}
+        @pointerleave=${this._hideTip}
+        @focus=${this._showTip}
+        @blur=${this._hideTip}
+      >
+        <span class=${d.streak < 0 ? "none" : ""}>${out}</span>
+        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-out-${i}` })}
+          >${t.outTip(d.streak, d.openEnded)}</span
+        >
+      </div>
     </div>`;
   }
 }

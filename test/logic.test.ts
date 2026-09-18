@@ -140,7 +140,7 @@ test("wash: light night rain and light daytime drizzle stay in the streak; heavy
   ]);
   const r = planWash(hours, NOW, WASH);
   const s = r.days.map((d) => d.streak);
-  expect(s.slice(0, 6)).toEqual([5, 4, 3, 2, 1, 1]);
+  expect(s.slice(0, 6)).toEqual([4, 3, 2, 1, 0, 0]);
   expect(r.days[6].openEnded).toBeTruthy();
   expect(r.bestIdx).toBe(0);
   expect(r.days[2].icon).toBe("moon");
@@ -155,7 +155,7 @@ test("wash: lowering the daytime threshold flips the Saturday drizzle into a str
     ["2026-09-21T15:00", 2.6],
   ]);
   const r = planWash(hours, NOW, { ...WASH, okRain: 0.3 });
-  expect(r.days.map((d) => d.streak).slice(0, 4)).toEqual([3, 2, 1, 2]);
+  expect(r.days.map((d) => d.streak).slice(0, 4)).toEqual([2, 1, 0, 1]);
 });
 
 test("wash: heavy rain late tomorrow afternoon → skip today, recommend Friday", () => {
@@ -165,24 +165,24 @@ test("wash: heavy rain late tomorrow afternoon → skip today, recommend Friday"
     ["2026-09-21T23:00", 0.4],
   ]);
   const r = planWash(hours, NOW, WASH);
-  expect(r.days[0].streak).toBe(1);
-  expect(r.days[1].streak).toBe(0);
+  expect(r.days[0].streak).toBe(0);
+  expect(r.days[1].streak).toBe(-1);
   expect(r.bestIdx).toBe(2);
-  expect(r.days[2].streak).toBeGreaterThanOrEqual(5);
+  expect(r.days[2].streak).toBeGreaterThanOrEqual(4);
   expect(r.todayBreakIdx).toBe(1);
 });
 
 test("wash: rain earlier in the afternoon does not forbid an evening wash", () => {
   const hours = series([["2026-09-17T13:00", 3.2]]);
   const r = planWash(hours, NOW, WASH);
-  expect(r.days[0].streak).toBe(1);
-  expect(r.days[1].streak).toBeGreaterThanOrEqual(5);
+  expect(r.days[0].streak).toBe(0);
+  expect(r.days[1].streak).toBeGreaterThanOrEqual(4);
   expect(r.bestIdx).toBe(1);
 });
 
 test("wash: rain this evening means you cannot wash today at all", () => {
   const hours = series([["2026-09-16T19:00", 1.0]]);
   const r = planWash(hours, NOW, WASH);
-  expect(r.days[0].streak).toBe(0);
+  expect(r.days[0].streak).toBe(-1);
   expect(r.bestIdx).toBeGreaterThan(0);
 });

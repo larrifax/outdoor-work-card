@@ -189,20 +189,11 @@ export const styles = css`
 
   /* ----- section label ----- */
   .sect {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-top: 20px;
-  }
-  .sect .l {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--owc-text-2);
-  }
-  .sect .r {
-    font-size: 11px;
     color: var(--owc-text-2);
   }
 
@@ -398,11 +389,61 @@ export const styles = css`
     font-weight: 600;
     color: var(--owc-text-2);
   }
-  .col.best .out span {
+  .col.best .out > span:not(.tip) {
     color: var(--owc-accent-text);
   }
   .out span.none {
     opacity: 0.5;
+  }
+  .out {
+    cursor: help;
+  }
+  .out .tip {
+    position: fixed;
+    position-area: top center;
+    margin: 0 0 8px;
+    inset: auto;
+    width: max-content;
+    max-width: 220px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    background: var(--owc-text);
+    color: var(--card-background-color, var(--ha-card-background, #fff));
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.35;
+    text-align: center;
+    overflow: visible;
+    opacity: 0;
+    transform: scale(0.95);
+    transition:
+      opacity 0.15s,
+      transform 0.15s,
+      overlay 0.15s allow-discrete,
+      display 0.15s allow-discrete;
+  }
+  .out .tip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    background: inherit;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border-radius: 2px;
+  }
+  .out .tip:popover-open {
+    opacity: 1;
+    transform: scale(1);
+  }
+  @starting-style {
+    .out .tip:popover-open {
+      opacity: 0;
+      transform: scale(0.95);
+    }
   }
 
   /* ----- footer / states ----- */
