@@ -1,12 +1,17 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
 import { parseHM } from "./time";
+import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
-export const DEFAULT_TASKS: TaskConfig[] = [
-  { name: "Mow", before: 24 },
-  { name: "Paint", before: 24, after: 24 },
-];
+export function defaultTasks(t: ReturnType<typeof strings>): TaskConfig[] {
+  return [
+    { name: t.taskMow, before: 24 },
+    { name: t.taskPaint, before: 24, after: 24 },
+  ];
+}
 
 export interface Resolved {
+  lang: Lang;
+  names: DayNames;
   mode: Mode;
   title: string;
   subtitle: string;
@@ -39,6 +44,9 @@ const num = (v: unknown, d: number, min = -Infinity, max = Infinity) => {
 };
 
 export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
+  const lang = pickLang(hass);
+  const t = strings(lang);
+  const names = dayNames(lang);
   const mode: Mode = c.mode === "carwash" ? "carwash" : "work";
   const lat = num(c.latitude, hass?.config?.latitude ?? 59.91, -90, 90);
   const lon = num(c.longitude, hass?.config?.longitude ?? 10.75, -180, 180);
@@ -51,21 +59,20 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
 
   const tasks =
     Array.isArray(c.tasks) && c.tasks.length
-      ? c.tasks.slice(0, 4).map((t, i) => ({
-          name: String(t?.name ?? `Task ${i + 1}`).slice(0, 12),
-          before: num(t?.before, 24, 0, 168),
-          after: t?.after === undefined || t?.after === null ? undefined : num(t.after, 24, 0, 168),
+      ? c.tasks.slice(0, 4).map((tc, i) => ({
+          name: String(tc?.name ?? `Task ${i + 1}`).slice(0, 12),
+          before: num(tc?.before, 24, 0, 168),
+          after:
+            tc?.after === undefined || tc?.after === null ? undefined : num(tc.after, 24, 0, 168),
         }))
-      : DEFAULT_TASKS;
+      : defaultTasks(t);
 
   return {
+    lang,
+    names,
     mode,
-    title: c.title ?? (mode === "carwash" ? "Car Wash" : "Outdoor Work"),
-    subtitle:
-      c.subtitle ??
-      (mode === "carwash"
-        ? "Which evening keeps it clean longest"
-        : "Dry-ground windows after work"),
+    title: c.title ?? (mode === "carwash" ? t.defWashTitle : t.defWorkTitle),
+    subtitle: c.subtitle ?? (mode === "carwash" ? t.defWashSub : t.defWorkSub),
     lat,
     lon,
     tz,

@@ -6,18 +6,19 @@
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { CardConfig, HassLike } from "./types";
+import { pickLang, strings, type EditorStrings } from "./i18n";
 
 type Schema = Array<Record<string, unknown>>;
 
-const COMMON: Schema = [
+const COMMON = (e: EditorStrings): Schema => [
   {
     name: "mode",
     selector: {
       select: {
         mode: "list",
         options: [
-          { value: "work", label: "Outdoor work — dry-ground windows after work" },
-          { value: "carwash", label: "Car wash — best evening for a lasting wash" },
+          { value: "work", label: e.modeWork },
+          { value: "carwash", label: e.modeWash },
         ],
       },
     },
@@ -44,7 +45,7 @@ const COMMON: Schema = [
   {
     type: "expandable",
     name: "",
-    title: "Location & data source",
+    title: e.locationSource,
     schema: [
       {
         type: "grid",
@@ -66,12 +67,9 @@ const COMMON: Schema = [
           select: {
             mode: "dropdown",
             options: [
-              {
-                value: "metno_seamless",
-                label: "MET Nordic 1 km (Norway, Sweden, Denmark, Finland) — recommended",
-              },
-              { value: "best_match", label: "Open-Meteo best match (anywhere)" },
-              { value: "ecmwf_ifs025", label: "ECMWF IFS 0.25°" },
+              { value: "metno_seamless", label: e.modelMetno },
+              { value: "best_match", label: e.modelBest },
+              { value: "ecmwf_ifs025", label: e.modelEcmwf },
             ],
           },
         },
@@ -81,7 +79,7 @@ const COMMON: Schema = [
   },
 ];
 
-const WORK: Schema = [
+const WORK = (e: EditorStrings): Schema => [
   {
     type: "grid",
     name: "",
@@ -100,8 +98,8 @@ const WORK: Schema = [
           select: {
             mode: "dropdown",
             options: [
-              { value: "dusk", label: "Civil dusk" },
-              { value: "sunset", label: "Sunset" },
+              { value: "dusk", label: e.winDusk },
+              { value: "sunset", label: e.winSunset },
             ],
           },
         },
@@ -154,40 +152,6 @@ const WASH: Schema = [
   },
 ];
 
-const LABELS: Record<string, string> = {
-  mode: "Card mode",
-  title: "Title",
-  subtitle: "Subtitle",
-  days: "Days to show",
-  refresh_minutes: "Refresh every",
-  latitude: "Latitude (blank = home)",
-  longitude: "Longitude (blank = home)",
-  model: "Weather model",
-  accent: "Accent colour (CSS)",
-  weekday_start: "Weekday window opens",
-  weekend_start: "Weekend window opens",
-  window_end: "Window closes at",
-  min_window_minutes: "Ignore windows shorter than",
-  rain_threshold: "Rain that wets the ground",
-  wash_start: "Wash time",
-  ok_rain: "Harmless daytime rain up to",
-  night_max: "Harmless night rain up to",
-  night_from: "Night starts",
-  night_until: "Night ends",
-  dry_roads_hours: "Roads must be dry for",
-};
-
-const HELPERS: Record<string, string> = {
-  rain_threshold: 'Anything above this counts as rain for "dry before / dry after".',
-  ok_rain: "Light drizzle under this will not smudge a clean car, day or night.",
-  night_max: "Heavier rain is tolerated overnight, when it does little cosmetic harm.",
-  min_window_minutes: "Evenings with less daylight than this are shown but never recommended.",
-  model: "MET Nordic is the same model behind Yr; it only covers the Nordics.",
-  accent: "Leave blank for the mode default (green for work, blue for car wash).",
-  dry_roads_hours:
-    "No heavy rain this long before the wash, so you are not driving a clean car on wet roads.",
-};
-
 @customElement("outdoor-work-card-editor")
 export class OutdoorWorkCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HassLike;
@@ -210,13 +174,18 @@ export class OutdoorWorkCardEditor extends LitElement {
     this._config = { ...config };
   }
 
-  private get _schema(): Schema {
-    const mode = this._config?.mode === "carwash" ? "carwash" : "work";
-    return [...COMMON, ...(mode === "carwash" ? WASH : WORK)];
+  private get _t() {
+    return strings(pickLang(this.hass)).ed;
   }
 
-  private _computeLabel = (s: { name: string }) => LABELS[s.name] ?? s.name;
-  private _computeHelper = (s: { name: string }) => HELPERS[s.name] ?? "";
+  private get _schema(): Schema {
+    const e = this._t;
+    const mode = this._config?.mode === "carwash" ? "carwash" : "work";
+    return [...COMMON(e), ...(mode === "carwash" ? WASH : WORK(e))];
+  }
+
+  private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
+  private _computeHelper = (s: { name: string }) => this._t.helpers[s.name] ?? "";
 
   private _changed(ev: CustomEvent): void {
     ev.stopPropagation();
@@ -243,6 +212,7 @@ export class OutdoorWorkCardEditor extends LitElement {
 
   protected override render(): TemplateResult | typeof nothing {
     if (!this.hass || !this._config) return nothing;
+    const e = this._t;
     const data = { mode: "work", ...this._config } as Record<string, unknown>;
     const isWork = data["mode"] !== "carwash";
     return html`
@@ -257,16 +227,11 @@ export class OutdoorWorkCardEditor extends LitElement {
       ${
         isWork
           ? html`<div class="note">
-              Activities default to <code>Mow</code> (24 h dry before) and <code>Paint</code> (24 h
-              before, 24 h after). Add or change them in YAML with <code>tasks:</code> — e.g.
-              <code>- name: Stain&nbsp;deck, before: 48, after: 12</code>.
+              ${e.noteTasks1}<code>Mow</code>${e.noteTasks2}<code>Paint</code>${e.noteTasks3}
             </div>`
           : nothing
       }
-      <div class="note">
-        The card fetches Open-Meteo directly from the browser — no sensors or helpers needed.
-        Location defaults to your home.
-      </div>
+      <div class="note">${e.noteFetch}</div>
     `;
   }
 }

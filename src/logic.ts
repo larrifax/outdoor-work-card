@@ -29,7 +29,15 @@ export interface DayBase {
 const SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function buildDays(now: number, tz: string, count: number): DayBase[] {
+/** Localized weekday names, indexed 0 = Sun … 6 = Sat. */
+export interface Names {
+  short: string[];
+  full: string[];
+}
+
+export function buildDays(now: number, tz: string, count: number, names?: Names): DayBase[] {
+  const short = names?.short ?? SHORT;
+  const full = names?.full ?? FULL;
   const today = localParts(now, tz);
   const out: DayBase[] = [];
   for (let i = 0; i < count; i++) {
@@ -38,8 +46,8 @@ export function buildDays(now: number, tz: string, count: number): DayBase[] {
     const dayStart = zonedToUtc(p.y, p.m, p.d, 0, 0, tz);
     out.push({
       key: p.key,
-      short: SHORT[p.wd]!,
-      full: FULL[p.wd]!,
+      short: short[p.wd]!,
+      full: full[p.wd]!,
       dom: p.d,
       isToday: i === 0,
       isWeekend: p.wd === 0 || p.wd === 6,
@@ -69,6 +77,8 @@ export interface WorkOptions {
   days: number;
   /** Runway hours are capped for display (default 48). */
   cap: number;
+  /** Localized weekday names. */
+  names?: Names;
 }
 
 export interface WorkDay extends DayBase {
@@ -130,7 +140,7 @@ function rainWithin(hours: HourPoint[], a: number, b: number, thr: number): bool
 }
 
 export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkResult {
-  const base = buildDays(now, o.tz, o.days);
+  const base = buildDays(now, o.tz, o.days, o.names);
   const first = hours[0]?.t ?? now;
   const last = hours.length ? hours[hours.length - 1]!.t + H : now;
 
@@ -217,6 +227,8 @@ export interface WashOptions {
   days: number;
   /** Hours before wash time that must be free of intolerable rain (roads dry). */
   leadHours: number;
+  /** Localized weekday names. */
+  names?: Names;
 }
 
 export type WashIcon = "sun" | "moon" | "drop" | "rain";
@@ -249,7 +261,7 @@ export interface WashResult {
 export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
   // Evaluate a few days beyond the displayed range so streaks can run past it.
   const extra = 3;
-  const base = buildDays(now, o.tz, o.days + extra);
+  const base = buildDays(now, o.tz, o.days + extra, o.names);
 
   const isNight = (ms: number) => {
     const p = localParts(ms, o.tz);

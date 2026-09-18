@@ -16,6 +16,7 @@ import {
 } from "./logic";
 import { hm, durLabel, hLabel } from "./time";
 import { icons, taskIcon } from "./icons";
+import { strings, type Strings } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
 
@@ -140,6 +141,7 @@ export class OutdoorWorkCard extends LitElement {
     const r = this._r;
     if (!r) return nothing;
     void this._tick;
+    const t = strings(r.lang);
     const hostStyle = { "--owc-accent": r.accent };
     const badge = r.mode === "carwash" ? icons.car(22) : icons.wrench(20);
 
@@ -154,7 +156,7 @@ export class OutdoorWorkCard extends LitElement {
           ${
             this._weather
               ? html`<div class="updated">
-                  ${this._loading ? "updating…" : hm(this._weather.fetchedAt, r.tz)}
+                  ${this._loading ? t.updating : hm(this._weather.fetchedAt, r.tz)}
                 </div>`
               : nothing
           }
@@ -163,18 +165,16 @@ export class OutdoorWorkCard extends LitElement {
           this._error
             ? html`<div class="state err">
                 ${icons.alert(16)}
-                <div>Couldn't load the forecast: <code>${this._error}</code></div>
+                <div>${t.loadErr} <code>${this._error}</code></div>
               </div>`
             : !this._weather
               ? html`<div class="state">
                   ${icons.info(16)}
-                  <div>
-                    Fetching forecast and recent rain for ${r.lat.toFixed(2)}, ${r.lon.toFixed(2)}…
-                  </div>
+                  <div>${t.fetching(r.lat.toFixed(2), r.lon.toFixed(2))}</div>
                 </div>`
               : r.mode === "carwash"
-                ? this._renderWash(r)
-                : this._renderWork(r)
+                ? this._renderWash(r, t)
+                : this._renderWork(r, t)
         }
       </ha-card>
     `;
@@ -182,7 +182,7 @@ export class OutdoorWorkCard extends LitElement {
 
   // ---- work mode ----------------------------------------------------------
 
-  private _renderWork(r: Resolved): TemplateResult {
+  private _renderWork(r: Resolved, t: Strings): TemplateResult {
     const res: WorkResult = planWork(this._weather!.hours, Date.now(), {
       tz: r.tz,
       lat: r.lat,
@@ -195,45 +195,55 @@ export class OutdoorWorkCard extends LitElement {
       tasks: r.tasks,
       days: r.days,
       cap: CAP,
+      names: r.names,
     });
     const anyTonight = res.tonightOk.length > 0;
     const allTonight = res.tonightOk.length === r.tasks.length;
     const heroCls = anyTonight ? "ok" : "warn";
     const today = res.days[0];
     let verdict: string;
-    if (allTonight) verdict = "Go tonight";
+    if (allTonight) verdict = t.goTonight;
     else if (anyTonight)
-      verdict = `Go tonight · ${res.tonightOk.map((k) => r.tasks[k]!.name.toLowerCase()).join(", ")} only`;
-    else if (today?.passed) verdict = "Today's window has passed";
-    else verdict = "Not tonight";
+      verdict = t.goTonightOnly(
+        res.tonightOk.map((k) => r.tasks[k]!.name.toLowerCase()).join(", "),
+      );
+    else if (today?.passed) verdict = t.passedToday;
+    else verdict = t.notTonight;
+
+    const windowEnd =
+      typeof r.windowEnd === "number"
+        ? fmtMin(r.windowEnd)
+        : r.windowEnd === "sunset"
+          ? t.sunset
+          : t.dusk;
 
     const when = (d: WorkDay) =>
-      `${d.isToday ? "Tonight" : d.full} · ${hm(d.effStart!, r.tz)}–${hm(d.end!, r.tz)}`;
+      `${d.isToday ? t.tonight : d.full} · ${hm(d.effStart!, r.tz)}–${hm(d.end!, r.tz)}`;
 
     return html`
       <div class="hero ${heroCls}">
         <div class="pill"><span class="dot"></span>${verdict}</div>
-        ${r.tasks.map((t, k) => {
+        ${r.tasks.map((task, k) => {
           const v = res.tasks[k]!;
           const nd = v.nextIdx >= 0 ? res.days[v.nextIdx] : undefined;
           const ld = v.longestIdx >= 0 ? res.days[v.longestIdx] : undefined;
           const need =
-            t.after === undefined
-              ? `needs ${t.before} h dry before`
-              : `needs ${t.before} h before · ${t.after} h after`;
+            task.after === undefined
+              ? t.needBefore(task.before)
+              : t.needBeforeAfter(task.before, task.after);
           let detail: string;
-          if (!nd) detail = `No day in the outlook meets that.`;
+          if (!nd) detail = t.noDayMeets;
           else {
-            detail = `${hLabel(nd.before, CAP)} dry beforehand`;
-            if (t.after !== undefined) detail += ` · ${hLabel(nd.after, CAP)} after`;
-            detail += ` · ${durLabel(nd.hours)} of light`;
-            if (ld && ld !== nd) detail += ` · longest: ${ld.full} (${durLabel(ld.hours)})`;
+            detail = t.dryBeforehand(hLabel(nd.before, CAP, t.hUnit));
+            if (task.after !== undefined) detail += t.afterPart(hLabel(nd.after, CAP, t.hUnit));
+            detail += t.ofLight(durLabel(nd.hours, t.hUnit));
+            if (ld && ld !== nd) detail += t.longestPart(ld.full, durLabel(ld.hours, t.hUnit));
           }
           return html` <div class="task">
-            <div class="ico ${nd ? "on" : "off"}">${taskIcon(t.name)(18)}</div>
+            <div class="ico ${nd ? "on" : "off"}">${taskIcon(task.name)(18)}</div>
             <div class="body">
-              <div class="k">${t.name} · ${need}</div>
-              <div class="v">${nd ? when(nd) : "No window this week"}</div>
+              <div class="k">${task.name} · ${need}</div>
+              <div class="v">${nd ? when(nd) : t.noWindowWeek}</div>
               <div class="d">${detail}</div>
             </div>
           </div>`;
@@ -241,26 +251,31 @@ export class OutdoorWorkCard extends LitElement {
       </div>
 
       <div class="grid cols">
-        <span>Day</span><span class="ra">Dry before</span><span>Window</span><span>Dry after</span
-        ><span class="ra">Good for</span>
+        <span>${t.colDay}</span><span class="ra">${t.colBefore}</span><span>${t.colWindow}</span
+        ><span>${t.colAfter}</span><span class="ra">${t.colGood}</span>
       </div>
-      <div class="rows">${res.days.map((d) => this._workRow(d, r))}</div>
+      <div class="rows">${res.days.map((d) => this._workRow(d, r, t))}</div>
 
       <div class="foot">
         ${icons.info(14)}
         <span>
-          Windows open ${fmtMin(r.weekdayStart)} on weekdays and ${fmtMin(r.weekendStart)} on
-          weekends and run until
-          ${typeof r.windowEnd === "number" ? fmtMin(r.windowEnd) : r.windowEnd}.
-          ${r.tasks.map((t) => `${t.name}: ${t.before} h dry before${t.after !== undefined ? ` and ${t.after} h after` : ""}`).join("; ")}.
-          Rain above ${r.rainThreshold} mm/h counts. Bars cap at ${CAP} h. Data: Open-Meteo
-          (${r.model}).
+          ${t.footWork({
+            weekday: fmtMin(r.weekdayStart),
+            weekend: fmtMin(r.weekendStart),
+            end: windowEnd,
+            tasks: r.tasks
+              .map((task) => t.taskPiece(task.name, task.before, task.after))
+              .join("; "),
+            thr: r.rainThreshold,
+            cap: CAP,
+            model: r.model,
+          })}
         </span>
       </div>
     `;
   }
 
-  private _workRow(d: WorkDay, r: Resolved): TemplateResult {
+  private _workRow(d: WorkDay, r: Resolved, t: Strings): TemplateResult {
     const acc = r.accent;
     const runway = (h: number, need: number) =>
       h >= need ? acc : h >= need / 2 ? "var(--owc-amber)" : "var(--owc-dim)";
@@ -271,20 +286,20 @@ export class OutdoorWorkCard extends LitElement {
           ? "var(--owc-amber-text)"
           : "var(--owc-text-2)";
     // Threshold used for colouring the runway bars = the strictest configured task need.
-    const needB = Math.max(...r.tasks.map((t) => t.before));
-    const afters = r.tasks.map((t) => t.after).filter((x): x is number => x !== undefined);
+    const needB = Math.max(...r.tasks.map((task) => task.before));
+    const afters = r.tasks.map((task) => task.after).filter((x): x is number => x !== undefined);
     const needA = afters.length ? Math.max(...afters) : 0;
     const anyOk = d.ok.some(Boolean);
     const pct = (h: number, max: number) => `${Math.max(5, Math.min(100, (h / max) * 100))}%`;
 
     const winColor = d.during ? "var(--owc-red)" : anyOk ? acc : "var(--owc-dim)";
     const winLabel = d.during
-      ? "rain"
+      ? t.rowRain
       : d.passed
-        ? "passed"
+        ? t.rowPassed
         : d.hours > 0
-          ? durLabel(d.hours)
-          : "dark";
+          ? durLabel(d.hours, t.hUnit)
+          : t.rowDark;
 
     return html` <div class="grid row ${classMap({ today: d.isToday, far: d.far })}">
       <div class="cell l"><span class="dn">${d.short}</span><span class="dd">${d.dom}</span></div>
@@ -294,7 +309,7 @@ export class OutdoorWorkCard extends LitElement {
           style=${styleMap({ width: pct(d.before, CAP), background: runway(d.before, needB) })}
         ></div>
         <span class="num" style=${styleMap({ color: runwayTxt(d.before, needB) })}
-          >${hLabel(d.before, CAP)}</span
+          >${hLabel(d.before, CAP, t.hUnit)}</span
         >
       </div>
       <div class="cell l">
@@ -313,18 +328,18 @@ export class OutdoorWorkCard extends LitElement {
         <span
           class="num"
           style=${styleMap({ color: needA ? runwayTxt(d.after, needA) : "var(--owc-text-2)" })}
-          >${hLabel(d.after, CAP)}</span
+          >${hLabel(d.after, CAP, t.hUnit)}</span
         >
       </div>
       <div class="pills">
-        ${r.tasks.map((t, k) => html`<span class="tp ${d.ok[k] ? "on" : "off"}">${t.name}</span>`)}
+        ${r.tasks.map((task, k) => html`<span class="tp ${d.ok[k] ? "on" : "off"}">${task.name}</span>`)}
       </div>
     </div>`;
   }
 
   // ---- car wash mode ------------------------------------------------------
 
-  private _renderWash(r: Resolved): TemplateResult {
+  private _renderWash(r: Resolved, t: Strings): TemplateResult {
     const res: WashResult = planWash(this._weather!.hours, Date.now(), {
       tz: r.tz,
       washStart: r.washStart,
@@ -334,35 +349,29 @@ export class OutdoorWorkCard extends LitElement {
       nightUntil: r.nightUntil,
       days: r.days,
       leadHours: r.leadHours,
+      names: r.names,
     });
     const best = res.days[res.bestIdx]!;
     const today = res.days[0]!;
     const ok = res.bestIdx === 0 && best.streak > 0;
     const none = best.streak === 0;
     const heroCls = ok ? "ok" : none ? "bad" : "bad";
-    const verdict = ok ? "Wash tonight" : none ? "No good evening in sight" : "Skip today";
-    const dayLabel = ok ? "Tonight" : none ? "—" : best.full;
-    const n = best.streak;
-    const streakLabel = none
-      ? "nothing stays clean"
-      : `${n}${best.openEnded ? "+" : ""} clean ${n === 1 && !best.openEnded ? "day" : "days"}`;
+    const verdict = ok ? t.washTonight : none ? t.noGoodEvening : t.skipToday;
+    const dayLabel = ok ? t.tonight : none ? t.dash : best.full;
+    const streakLabel = none ? t.nothingClean : t.cleanDays(best.streak, best.openEnded);
 
     let why: string;
     const brk = res.todayBreakIdx >= 0 ? (res.days[res.todayBreakIdx] ?? undefined) : undefined;
-    const describe = (d: WashDay) =>
-      `${d.full}'s ${d.peakNight ? "night" : "daytime"} rain (${d.peak.toFixed(1)} mm/h)`;
+    const describe = (d: WashDay) => t.describe(d.full, d.peakNight, d.peak.toFixed(1));
     if (ok) {
       why = brk
-        ? `Dry from ${fmtMin(r.washStart)} tonight. Stays clean until ${describe(brk)}.`
-        : `Dry from ${fmtMin(r.washStart)} tonight, and no spoiling rain in the whole outlook.`;
+        ? t.whyOkBreak(fmtMin(r.washStart), describe(brk))
+        : t.whyOkNoRain(fmtMin(r.washStart));
     } else if (none) {
-      why = `Every evening in the outlook is followed by rain above ${r.okRain} mm/h within a day.`;
+      why = t.whyNone(r.okRain);
     } else {
-      const head =
-        today.streak === 0
-          ? `Rain tonight rules out washing today`
-          : `A wash today lasts only ${today.streak} ${today.streak === 1 ? "day" : "days"}`;
-      why = `${head}${brk ? ` — ${describe(brk)} spoils it.` : "."}`;
+      const head = today.streak === 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
+      why = `${head}${brk ? t.whySpoils(describe(brk)) : "."}`;
     }
 
     return html`
@@ -375,30 +384,40 @@ export class OutdoorWorkCard extends LitElement {
       </div>
 
       <div class="sect">
-        <span class="l">Wash which evening?</span
-        ><span class="r">bottom row: clean days after</span>
+        <span class="l">${t.sectAsk}</span><span class="r">${t.sectHint}</span>
       </div>
       <div class="strip d${r.days}">
-        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak > 0))}
+        ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak > 0, t))}
       </div>
 
       <div class="foot">
         ${icons.info(14)}
         <span>
-          Washing from ${fmtMin(r.washStart)}. Rain up to ${r.okRain} mm/h is fine; heavier daytime
-          rain ends the clean streak. Night (${fmtMin(r.nightFrom)}–${fmtMin(r.nightUntil)})
-          tolerates up to ${r.nightMax} mm/h. Data: Open-Meteo (${r.model}).
+          ${t.footWash({
+            washStart: fmtMin(r.washStart),
+            okRain: r.okRain,
+            from: fmtMin(r.nightFrom),
+            until: fmtMin(r.nightUntil),
+            nightMax: r.nightMax,
+            model: r.model,
+          })}
         </span>
       </div>
     `;
   }
 
-  private _washCol(d: WashDay, isBest: boolean): TemplateResult {
-    const tag = d.isToday && isBest ? "Tonight" : isBest ? "Best" : d.isToday ? "Now" : "";
-    const mm = d.peak <= 0.05 ? "dry" : `${d.peak.toFixed(1)} mm`;
+  private _washCol(d: WashDay, isBest: boolean, t: Strings): TemplateResult {
+    const tag = d.isToday && isBest ? t.tagTonight : isBest ? t.tagBest : d.isToday ? t.tagNow : "";
+    const mm = d.peak <= 0.05 ? t.dry : t.mm(d.peak.toFixed(1));
     const when =
-      d.peak <= 0.05 ? "clear" : d.clearsBeforeWash ? "earlier" : d.peakNight ? "night" : "daytime";
-    const out = d.streak === 0 ? "—" : `${d.streak}${d.openEnded ? "+" : ""} d`;
+      d.peak <= 0.05
+        ? t.whenClear
+        : d.clearsBeforeWash
+          ? t.whenEarlier
+          : d.peakNight
+            ? t.whenNight
+            : t.whenDaytime;
+    const out = d.streak === 0 ? t.dash : t.outDays(d.streak, d.openEnded);
     return html` <div class="col ${classMap({ best: isBest, far: d.far })}">
       <span class="tag">${tag}</span>
       <span class="dn">${d.short}</span>
