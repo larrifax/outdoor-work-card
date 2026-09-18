@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+.vscode/settings.json
+.idea
+*.log
+.claude/
+.vitest/
+
+test/__screenshots__/

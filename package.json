@@ -1,0 +1,45 @@
+{
+  "name": "outdoor-work-card",
+  "version": "0.1.0",
+  "description": "Home Assistant Lovelace card that finds dry windows for outdoor work (mowing, painting) and the best evening to wash the car. Self-contained: fetches its own forecast + recent rain history.",
+  "license": "MIT",
+  "author": "Kristian Tryggestad",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/larrifax/outdoor-work-card"
+  },
+  "type": "module",
+  "main": "dist/outdoor-work-card.js",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "lit": "^3.1.4"
+  },
+  "devDependencies": {
+    "@vitest/browser": "^5.0.0",
+    "@vitest/browser-playwright": "^5.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
+    "playwright": "^1.63.0",
+    "typescript": "^5.5.4",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,mjs,js}": [
+      "oxlint --fix",
+      "oxfmt"
+    ]
+  },
+  "packageManager": "pnpm@12.4.1"
+}
