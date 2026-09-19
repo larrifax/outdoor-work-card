@@ -14,7 +14,7 @@ import {
   type WorkDay,
   type WashDay,
 } from "./logic";
-import { hm, durLabel, hLabel } from "./time";
+import { hm, durLabel, hLabel, localParts } from "./time";
 import { icons, taskIcon } from "./icons";
 import { strings, type Strings } from "./i18n";
 import { styles } from "./styles";
@@ -425,22 +425,54 @@ export class OutdoorWorkCard extends LitElement {
   private _washCol(d: WashDay, isBest: boolean, t: Strings, i: number): TemplateResult {
     const tag = d.isToday && isBest ? t.tagTonight : isBest ? t.tagBest : d.isToday ? t.tagNow : "";
     const mm = d.peak <= 0.05 ? t.dry : t.mm(d.peak.toFixed(1));
-    const when =
-      d.peak <= 0.05
-        ? t.whenClear
-        : d.clearsBeforeWash
-          ? t.whenEarlier
-          : d.peakNight
-            ? t.whenNight
-            : t.whenDaytime;
+    const kind =
+      d.peak <= 0.05 ? "clear" : d.clearsBeforeWash ? "earlier" : d.peakNight ? "night" : "daytime";
+    const when = {
+      clear: t.whenClear,
+      earlier: t.whenEarlier,
+      night: t.whenNight,
+      daytime: t.whenDaytime,
+    }[kind];
     const out = d.streak < 0 ? t.dash : t.outDays(d.streak, d.openEnded);
+    const r = this._r;
+    const ev = d.nextRain;
+    const tip =
+      ev && r
+        ? html`${t.outNextRain(
+              r.names.full[localParts(ev.at, r.tz).wd]!,
+              hm(ev.at, r.tz),
+              hm(ev.at + ev.hours * 3_600_000, r.tz),
+              ev.hours,
+            )}
+            <div class="stats">
+              <div><span>${t.statTotal}</span><b>${ev.total.toFixed(1)} ${t.unitMm}</b></div>
+              <div><span>${t.statPeak}</span><b>${ev.peak.toFixed(1)} ${t.unitRate}</b></div>
+            </div>`
+        : d.streak < 0
+          ? t.outDirty
+          : t.outTip(d.streak, d.openEnded);
     return html` <div class="col ${classMap({ best: isBest, far: d.far })}">
       <span class="tag">${tag}</span>
-      <span class="dn">${d.short}</span>
-      <span class="dd">${d.dom}</span>
-      <div class="ic ${d.icon}">${icons[d.icon](d.icon === "drop" ? 16 : 20)}</div>
-      <span class="mm ${d.tolerated ? "" : "bad"}">${mm}</span>
-      <span class="when">${when}</span>
+      <div class="date">
+        <span class="dn">${d.short}</span>
+        <span class="dd">${d.dom}</span>
+      </div>
+      <div
+        class="day"
+        tabindex="0"
+        style=${styleMap({ "anchor-name": `--owc-day-${i}` })}
+        @pointerenter=${this._showTip}
+        @pointerleave=${this._hideTip}
+        @focus=${this._showTip}
+        @blur=${this._hideTip}
+      >
+        <div class="ic ${d.icon}">${icons[d.icon](d.icon === "drop" ? 16 : 20)}</div>
+        <span class="mm ${d.tolerated ? "" : "bad"}">${mm}</span>
+        <span class="when">${when}</span>
+        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
+          >${t.washInfo(kind, d.peak.toFixed(1))}</span
+        >
+      </div>
       <div
         class="out"
         tabindex="0"
@@ -452,7 +484,7 @@ export class OutdoorWorkCard extends LitElement {
       >
         <span class=${d.streak < 0 ? "none" : ""}>${out}</span>
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-out-${i}` })}
-          >${t.outTip(d.streak, d.openEnded)}</span
+          >${tip}</span
         >
       </div>
     </div>`;

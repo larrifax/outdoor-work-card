@@ -339,6 +339,17 @@ export const styles = css`
   .col.best .tag {
     color: var(--owc-accent-text);
   }
+  .col .date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .col .dn,
+  .col .dd {
+    text-box-trim: trim-both;
+    text-box-edge: cap alphabetic;
+  }
   .col .dn {
     font-size: 13px;
     font-weight: 600;
@@ -395,10 +406,17 @@ export const styles = css`
   .out span.none {
     opacity: 0.5;
   }
-  .out {
+  .out,
+  .day {
     cursor: help;
   }
-  .out .tip {
+  .day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .tip {
     position: fixed;
     position-area: top center;
     margin: 0 0 8px;
@@ -424,7 +442,27 @@ export const styles = css`
       overlay 0.15s allow-discrete,
       display 0.15s allow-discrete;
   }
-  .out .tip::after {
+  .out .tip .stats {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 6px;
+  }
+  .out .tip .stats div {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .out .tip .stats span {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .out .tip .stats b {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .tip::after {
     content: "";
     position: absolute;
     top: 100%;
@@ -435,12 +473,12 @@ export const styles = css`
     transform: translate(-50%, -50%) rotate(45deg);
     border-radius: 2px;
   }
-  .out .tip:popover-open {
+  .tip:popover-open {
     opacity: 1;
     transform: scale(1);
   }
   @starting-style {
-    .out .tip:popover-open {
+    .tip:popover-open {
       opacity: 0;
       transform: scale(0.95);
     }

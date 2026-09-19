@@ -108,6 +108,14 @@ export interface Strings {
   describe: (full: string, night: boolean, peak: string) => string;
   sectAsk: string;
   outTip: (streak: number, open: boolean) => string;
+  /** Tip when the wash evening itself is rained out (a "—" day). */
+  outDirty: string;
+  /** Headline sentence when the next rain event is known. */
+  outNextRain: (day: string, from: string, to: string, hours: number) => string;
+  statTotal: string;
+  statPeak: string;
+  unitMm: string; // "mm"
+  unitRate: string; // "mm/h" / "mm/t"
   tagTonight: string;
   tagBest: string;
   tagNow: string;
@@ -117,6 +125,7 @@ export interface Strings {
   whenEarlier: string;
   whenNight: string;
   whenDaytime: string;
+  washInfo: (kind: "clear" | "earlier" | "night" | "daytime", peak: string) => string;
   outDays: (streak: number, open: boolean) => string;
   footWash: (a: {
     washStart: string;
@@ -214,7 +223,14 @@ const EN: Strings = {
   outTip: (streak, open) =>
     streak === 0 && !open
       ? "No upcoming dry-weather streak"
-      : `${streak}${open ? "+" : ""} day${streak === 1 && !open ? "" : "s"} until next real rainfall`,
+      : `${streak}+ days until next real rainfall`,
+  outDirty: "Too wet to wash — rain during or right after the wash window",
+  outNextRain: (day, from, to, hours) =>
+    `Next real rain on ${day} between ${from}–${to} (${hours} h)`,
+  statTotal: "Total",
+  statPeak: "Peak",
+  unitMm: "mm",
+  unitRate: "mm/h",
   tagTonight: "Tonight",
   tagBest: "Best",
   tagNow: "Now",
@@ -224,6 +240,14 @@ const EN: Strings = {
   whenEarlier: "earlier",
   whenNight: "night",
   whenDaytime: "daytime",
+  washInfo: (kind, peak) =>
+    kind === "clear"
+      ? "No rain forecast — the car stays clean all day."
+      : kind === "earlier"
+        ? `Peak ${peak} mm/h falls before wash time, so the evening is still washable.`
+        : kind === "night"
+          ? `Peak ${peak} mm/h falls overnight — gentle enough to tolerate.`
+          : `Peak ${peak} mm/h during the day — heavy enough to dirty a clean car.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
   footWash: (a) =>
     `Washing from ${a.washStart}. Rain up to ${a.okRain} mm/h is fine; heavier daytime rain ends the clean streak. Night (${a.from}–${a.until}) tolerates up to ${a.nightMax} mm/h. Data: Open-Meteo (${a.model}).`,
@@ -343,7 +367,14 @@ const NB: Strings = {
   outTip: (streak, open) =>
     streak === 0 && !open
       ? "Ingen kommende tørrværsperiode"
-      : `${streak}${open ? "+" : ""} ${streak === 1 && !open ? "dag" : "dager"} til neste ordentlige nedbør`,
+      : `${streak}+ dager til neste ordentlige nedbør`,
+  outDirty: "For vått til å vaske — nedbør under eller rett etter vaskevinduet",
+  outNextRain: (day, from, to, hours) =>
+    `Neste ordentlige nedbør ${day} mellom ${from}–${to} (${hours} t)`,
+  statTotal: "Totalt",
+  statPeak: "Topp",
+  unitMm: "mm",
+  unitRate: "mm/t",
   tagTonight: "I kveld",
   tagBest: "Best",
   tagNow: "Nå",
@@ -353,6 +384,14 @@ const NB: Strings = {
   whenEarlier: "tidligere",
   whenNight: "natt",
   whenDaytime: "dag",
+  washInfo: (kind, peak) =>
+    kind === "clear"
+      ? "Ingen nedbør meldt — bilen holder seg ren hele dagen."
+      : kind === "earlier"
+        ? `Topp ${peak} mm/t faller før vasketid, så kvelden er fortsatt vaskbar.`
+        : kind === "night"
+          ? `Topp ${peak} mm/t faller om natten — mildt nok til å tåles.`
+          : `Topp ${peak} mm/t på dagtid — kraftig nok til å skitne til en ren bil.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
   footWash: (a) =>
     `Vask fra ${a.washStart}. Nedbør opptil ${a.okRain} mm/t går fint; kraftigere dagregn avslutter den rene perioden. Natt (${a.from}–${a.until}) tåler opptil ${a.nightMax} mm/t. Data: Open-Meteo (${a.model}).`,
