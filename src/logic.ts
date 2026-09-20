@@ -269,6 +269,8 @@ export interface WashResult {
   bestIdx: number;
   /** Index of the day whose rain ends a wash-today streak, -1 if none. */
   todayBreakIdx: number;
+  /** Index of the day whose rain ends the recommended evening's streak, -1 if open-ended. */
+  bestBreakIdx: number;
 }
 
 export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
@@ -383,5 +385,10 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   const breakIdx = t0.n + 1; // wash day no longer counted, so the break sits one day later
   const todayBreakIdx = t0.open ? -1 : breakIdx < base.length ? breakIdx : -1;
 
-  return { days, bestIdx, todayBreakIdx };
+  // Same, for the recommended evening: the day whose rain ends its streak.
+  const tb = streakFrom(bestIdx);
+  const bb = bestIdx + tb.n + 1;
+  const bestBreakIdx = tb.open ? -1 : bb < base.length ? bb : -1;
+
+  return { days, bestIdx, todayBreakIdx, bestBreakIdx };
 }

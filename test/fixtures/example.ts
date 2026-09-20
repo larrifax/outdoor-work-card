@@ -34,6 +34,15 @@ export const GOOD = build([
   ["2026-09-22T12:00", 1.4],
 ]);
 
+// Wash-tonight scenario (keyed by latitude 59.90): tonight is the pick, a wash
+// now stays clean for 5 days, ended by Tuesday's daytime rain. Renders the `ok`
+// hero state (no banner, no trade-off line).
+export const TONIGHT = build([
+  ["2026-09-15T10:00", 1.0],
+  ["2026-09-22T14:00", 2.6],
+  ["2026-09-22T15:00", 1.8],
+]);
+
 export const RAINY = build([
   ["2026-09-16T09:00", 1.1],
   ["2026-09-16T10:00", 2.0],

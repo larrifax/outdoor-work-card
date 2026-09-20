@@ -16,7 +16,7 @@ import {
 } from "./logic";
 import { hm, durLabel, hLabel, localParts } from "./time";
 import { icons, taskIcon } from "./icons";
-import { strings, type Strings } from "./i18n";
+import { strings, type Strings, type Seg } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
 
@@ -47,6 +47,7 @@ export class OutdoorWorkCard extends LitElement {
   @state() private _loading = false;
   /** bumps every few minutes so "tonight" recomputes as time passes */
   @state() private _tick = 0;
+  @state() private _infoOpen = false;
 
   private _refreshTimer?: number;
   private _tickTimer?: number;
@@ -91,11 +92,36 @@ export class OutdoorWorkCard extends LitElement {
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     if (this._tickTimer) clearInterval(this._tickTimer);
     document.removeEventListener("visibilitychange", this._onVisible);
+    document.removeEventListener("click", this._onDocClick);
+    document.removeEventListener("keydown", this._onKey);
   }
 
   protected override updated(changed: PropertyValues): void {
     if (changed.has("hass") && !this._weather && !this._loading) this._maybeLoad(false);
+    if (changed.has("_infoOpen")) {
+      if (this._infoOpen) {
+        document.addEventListener("click", this._onDocClick);
+        document.addEventListener("keydown", this._onKey);
+      } else {
+        document.removeEventListener("click", this._onDocClick);
+        document.removeEventListener("keydown", this._onKey);
+      }
+    }
   }
+
+  private _toggleInfo = (e: Event) => {
+    e.stopPropagation();
+    this._infoOpen = !this._infoOpen;
+  };
+  private _closeInfo = () => {
+    this._infoOpen = false;
+  };
+  private _onDocClick = (e: Event) => {
+    if (!e.composedPath().includes(this)) this._closeInfo();
+  };
+  private _onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") this._closeInfo();
+  };
 
   private _onVisible = () => {
     if (document.visibilityState === "visible") this._maybeLoad(false);
@@ -153,13 +179,37 @@ export class OutdoorWorkCard extends LitElement {
             <div class="title">${r.title}</div>
             <div class="sub">${r.subtitle}</div>
           </div>
-          ${
-            this._weather
-              ? html`<div class="updated">
-                  ${this._loading ? t.updating : hm(this._weather.fetchedAt, r.tz)}
-                </div>`
-              : nothing
-          }
+          <div class="prov">
+            ${
+              this._weather
+                ? html`<span class="ts"
+                    >${this._loading ? t.updating : hm(this._weather.fetchedAt, r.tz)}</span
+                  >`
+                : nothing
+            }
+            <button
+              class="qbtn"
+              type="button"
+              aria-label=${r.mode === "carwash" ? t.popHeadWash : t.popHeadWork}
+              aria-expanded=${this._infoOpen}
+              aria-controls="owc-pop"
+              @click=${this._toggleInfo}
+            >
+              ${icons.question(15)}
+            </button>
+            ${
+              this._infoOpen
+                ? html`<div
+                    id="owc-pop"
+                    class="pop"
+                    role="dialog"
+                    aria-label=${r.mode === "carwash" ? t.popHeadWash : t.popHeadWork}
+                  >
+                    ${this._renderRules(r, t)}
+                  </div>`
+                : nothing
+            }
+          </div>
         </div>
         ${
           this._error
@@ -178,6 +228,60 @@ export class OutdoorWorkCard extends LitElement {
         }
       </ha-card>
     `;
+  }
+
+  // ---- info popover (design F) --------------------------------------------
+
+  private _renderRules(r: Resolved, t: Strings): TemplateResult {
+    const model = r.model === "metno_seamless" ? "MET Nordic 1 km" : r.model;
+    const mono = (s: string) => html`<span class="mono">${s}</span>`;
+
+    let head: string;
+    let rows: TemplateResult[];
+    if (r.mode === "carwash") {
+      head = t.popHeadWash;
+      rows = [
+        this._ruleRow(t.popWashFrom, mono(fmtMin(r.washStart))),
+        this._ruleRow(t.popHarmlessDay, mono(t.popUpTo(r.okRain))),
+        this._ruleRow(
+          t.popHarmlessNight,
+          mono(t.popNightVal(r.nightMax, fmtMin(r.nightFrom), fmtMin(r.nightUntil))),
+        ),
+        this._ruleRow(t.popRoadsDry, mono(t.popHours(r.leadHours))),
+      ];
+    } else {
+      head = t.popHeadWork;
+      const end =
+        typeof r.windowEnd === "number"
+          ? fmtMin(r.windowEnd)
+          : r.windowEnd === "sunset"
+            ? t.sunset
+            : t.dusk;
+      rows = [
+        this._ruleRow(t.popWeekdayWin, html`${mono(fmtMin(r.weekdayStart))} → ${mono(end)}`),
+        this._ruleRow(t.popWeekendWin, html`${mono(fmtMin(r.weekendStart))} → ${mono(end)}`),
+        this._ruleRow(t.popIgnoreUnder, mono(t.popMinutes(r.minWindowMinutes))),
+        this._ruleRow(t.popCountsRain, mono(t.popAboveRate(r.rainThreshold))),
+        ...r.tasks.map((task) =>
+          this._ruleRow(
+            task.name,
+            task.after === undefined
+              ? mono(t.popDryBefore(task.before))
+              : mono(t.popDryBeforeAfter(task.before, task.after)),
+          ),
+        ),
+      ];
+    }
+
+    return html`
+      <div class="h">${head}</div>
+      <div class="grid">${rows}</div>
+      <div class="src">${t.popSrc(model)}</div>
+    `;
+  }
+
+  private _ruleRow(label: string, value: TemplateResult): TemplateResult {
+    return html`<span class="k">${label}</span><span class="v">${value}</span>`;
   }
 
   // ---- work mode ----------------------------------------------------------
@@ -209,13 +313,6 @@ export class OutdoorWorkCard extends LitElement {
       );
     else if (today?.passed) verdict = t.passedToday;
     else verdict = t.notTonight;
-
-    const windowEnd =
-      typeof r.windowEnd === "number"
-        ? fmtMin(r.windowEnd)
-        : r.windowEnd === "sunset"
-          ? t.sunset
-          : t.dusk;
 
     const when = (d: WorkDay) =>
       `${d.isToday ? t.tonight : d.full} · ${hm(d.effStart!, r.tz)}–${hm(d.end!, r.tz)}`;
@@ -255,23 +352,6 @@ export class OutdoorWorkCard extends LitElement {
         ><span>${t.colAfter}</span><span class="ra">${t.colGood}</span>
       </div>
       <div class="rows">${res.days.map((d) => this._workRow(d, r, t))}</div>
-
-      <div class="foot">
-        ${icons.info(14)}
-        <span>
-          ${t.footWork({
-            weekday: fmtMin(r.weekdayStart),
-            weekend: fmtMin(r.weekendStart),
-            end: windowEnd,
-            tasks: r.tasks
-              .map((task) => t.taskPiece(task.name, task.before, task.after))
-              .join("; "),
-            thr: r.rainThreshold,
-            cap: CAP,
-            model: r.model,
-          })}
-        </span>
-      </div>
     `;
   }
 
@@ -353,53 +433,93 @@ export class OutdoorWorkCard extends LitElement {
     });
     const best = res.days[res.bestIdx]!;
     const today = res.days[0]!;
-    const ok = res.bestIdx === 0 && best.streak >= 0;
-    const none = best.streak < 0;
-    const heroCls = ok ? "ok" : none ? "bad" : "bad";
-    const verdict = ok ? t.washTonight : none ? t.noGoodEvening : t.skipToday;
+    // `streak` = clean days after the wash day; -1 = the evening can't be washed at all.
+    const none = best.streak < 0; // no evening in the outlook works
+    const ok = !none && res.bestIdx === 0; // tonight is the pick
+    const skip = !ok && !none; // banner + trade-off state
+    const heroCls = ok ? "ok" : none ? "bad" : "rec";
+
+    const washStart = fmtMin(r.washStart);
+    const waitDays = res.bestIdx; // 0 = tonight
+    const gain = best.streak - today.streak; // may be <= 0 only through open-ended rounding
+    const describe = (d: WashDay) => t.describe(d.full, d.peakNight, d.peak.toFixed(1));
+    const dayAt = (i: number) => (i >= 0 && i < res.days.length ? res.days[i] : undefined);
+    const todayBreak = dayAt(res.todayBreakIdx);
+    const bestBreak = dayAt(res.bestBreakIdx);
+
+    const caption = ok ? t.capBest : skip ? t.capWashOn : t.capOutlook;
     const dayLabel = ok ? t.tonight : none ? t.dash : best.full;
     const streakLabel = none ? t.nothingClean : t.cleanDays(best.streak, best.openEnded);
 
-    let why: string;
-    const brk = res.todayBreakIdx >= 0 ? (res.days[res.todayBreakIdx] ?? undefined) : undefined;
-    const describe = (d: WashDay) => t.describe(d.full, d.peakNight, d.peak.toFixed(1));
+    // Alert banner (skip only): why tonight is not the pick.
+    let bannerText = "";
+    if (skip) {
+      bannerText =
+        today.streak < 0
+          ? t.bannerRain(washStart) // can't wash tonight at all
+          : today.streak === 0
+            ? todayBreak
+              ? t.bannerBrief(describe(todayBreak)) // washable, but nothing lasts the day
+              : t.bannerRain(washStart)
+            : todayBreak
+              ? t.bannerLasts(today.streak, describe(todayBreak))
+              : t.bannerLastsNoBreak(today.streak);
+    }
+
+    // Context line under the recommended day.
+    let contextLine: string;
     if (ok) {
-      why = brk
-        ? t.whyOkBreak(fmtMin(r.washStart), describe(brk))
-        : t.whyOkNoRain(fmtMin(r.washStart));
+      contextLine = todayBreak
+        ? t.whyOkBreak(washStart, describe(todayBreak))
+        : t.whyOkNoRain(washStart);
     } else if (none) {
-      why = t.whyNone(r.okRain);
+      contextLine = t.whyNone(r.okRain);
     } else {
-      const head = today.streak < 0 ? t.whySkipHeadRain : t.whySkipHeadLasts(today.streak);
-      why = `${head}${brk ? t.whySpoils(describe(brk)) : "."}`;
+      contextLine =
+        t.ctxSkipFrom(washStart, waitDays) +
+        (bestBreak ? t.ctxStaysUntil(describe(bestBreak)) : t.ctxStaysPast);
+    }
+
+    // Trade-off line (skip only, below a hairline). undefined = omit.
+    let tradeoff: TemplateResult | undefined;
+    if (skip) {
+      let segs: Seg[] | undefined;
+      if (today.streak < 0) segs = t.tradeoffFirst(best.full);
+      else if (gain >= 2) segs = t.tradeoffBuys(waitDays, gain, best.openEnded);
+      else if (gain === 1) segs = t.tradeoffOnly(waitDays);
+      // gain <= 0: omit (rounding of open-ended streaks).
+      if (segs)
+        tradeoff = html`${segs.map((s) =>
+          typeof s === "string" ? s : html`<strong class=${s.gain ? "gain" : ""}>${s.b}</strong>`,
+        )}`;
     }
 
     return html`
+      ${
+        skip
+          ? html`<div class="alert">
+              ${icons.alert(15)}
+              <div><span class="lbl">${t.bannerLbl}</span> · ${bannerText}</div>
+            </div>`
+          : nothing
+      }
+
       <div class="hero ${heroCls}">
-        <div class="pill"><span class="dot"></span>${verdict}</div>
+        <div class="cap">${caption}</div>
         <div class="big">
           <span class="day">${dayLabel}</span><span class="n">${streakLabel}</span>
         </div>
-        <div class="why">${why}</div>
+        <div class="why">${contextLine}</div>
+        ${
+          tradeoff
+            ? html`<div class="tradeoff">${icons.arrow(16)}<span>${tradeoff}</span></div>`
+            : nothing
+        }
       </div>
 
       <div class="sect">${t.sectAsk}</div>
       <div class="strip d${r.days}">
         ${res.days.map((d, i) => this._washCol(d, i === res.bestIdx && d.streak >= 0, t, i))}
-      </div>
-
-      <div class="foot">
-        ${icons.info(14)}
-        <span>
-          ${t.footWash({
-            washStart: fmtMin(r.washStart),
-            okRain: r.okRain,
-            from: fmtMin(r.nightFrom),
-            until: fmtMin(r.nightUntil),
-            nightMax: r.nightMax,
-            model: r.model,
-          })}
-        </span>
       </div>
     `;
   }

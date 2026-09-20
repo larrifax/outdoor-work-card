@@ -45,8 +45,14 @@ export const icons = {
     ),
   info: (s = 14) =>
     wrap(svg`<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6h.01"/>`, s),
+  question: (s = 15) =>
+    wrap(
+      svg`<circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5"/><path d="M12 17.5h.01"/>`,
+      s,
+    ),
   alert: (s = 16) =>
     wrap(svg`<path d="M12 3l10 18H2z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>`, s),
+  arrow: (s = 16) => wrap(svg`<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>`, s),
 } satisfies Record<string, Icon>;
 
 /** Pick an icon for a task by name; falls back to a generic check. */
