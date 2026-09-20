@@ -170,6 +170,45 @@ test("wash: heavy rain late tomorrow afternoon → skip today, recommend Friday"
   expect(r.bestIdx).toBe(2);
   expect(r.days[2].streak).toBeGreaterThanOrEqual(4);
   expect(r.todayBreakIdx).toBe(1);
+  // Friday's streak runs past the outlook (only tolerated night rain after) → open-ended.
+  expect(r.days[2].openEnded).toBe(true);
+  expect(r.bestBreakIdx).toBe(-1);
+});
+
+// A daily-afternoon-rain tail keeps later evenings from running open-ended off
+// the end of the outlook, so `bestIdx` stays where the scenario puts it.
+const rainyTail = (from: number): [string, number][] => {
+  const a: [string, number][] = [];
+  for (let d = from; d <= 28; d++) a.push([`2026-09-${String(d).padStart(2, "0")}T14:00`, 2.6]);
+  return a;
+};
+
+test("wash: bestBreakIdx points at the day whose rain ends the recommended streak", () => {
+  // Tonight ruled out; the recommended evening (Thu) lasts one day, ended by Sat rain.
+  const hours = series([["2026-09-16T19:00", 1.0], ...rainyTail(19)], { days: 15 });
+  const r = planWash(hours, NOW, WASH);
+  expect(r.days[0].streak).toBe(-1); // can't wash tonight
+  expect(r.bestIdx).toBe(1); // Thursday
+  expect(r.days[1].openEnded).toBe(false);
+  expect(r.bestBreakIdx).toBe(3); // Saturday's rain ends it
+  expect(r.days[r.bestBreakIdx].short).toBe("Sat");
+});
+
+test("wash: small gain — best evening is only one clean day better than tonight", () => {
+  // Tonight lasts 1 day; a wash two days out lasts 2. gain === 1, waitDays === 2.
+  const hours = series(
+    [
+      ["2026-09-18T14:00", 2.6], // Fri afternoon ends the Wed-evening streak (1)
+      ["2026-09-21T14:00", 2.6], // Mon afternoon ends the Fri-evening streak (2)
+      ...rainyTail(22),
+    ],
+    { days: 15 },
+  );
+  const r = planWash(hours, NOW, WASH);
+  expect(r.days[0].streak).toBe(1);
+  expect(r.bestIdx).toBe(2);
+  expect(r.days[2].streak).toBe(2);
+  expect(r.days[2].streak - r.days[0].streak).toBe(1);
 });
 
 test("wash: rain earlier in the afternoon does not forbid an evening wash", () => {

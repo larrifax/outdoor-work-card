@@ -2,7 +2,7 @@ import { test, expect, beforeAll, afterAll } from "vitest";
 import { page } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
-import { GOOD, RAINY } from "./fixtures/example";
+import { GOOD, RAINY, TONIGHT } from "./fixtures/example";
 
 // Minimal <ha-card> so the bundle renders outside Home Assistant.
 beforeAll(() => {
@@ -26,7 +26,8 @@ beforeAll(() => {
   globalThis.fetch = (async (url: string | URL) => {
     const u = new URL(String(url));
     const lat = parseFloat(u.searchParams.get("latitude") ?? "0");
-    const body = Math.abs(lat - 59.92) < 0.001 ? RAINY : GOOD;
+    const body =
+      Math.abs(lat - 59.92) < 0.001 ? RAINY : Math.abs(lat - 59.9) < 0.001 ? TONIGHT : GOOD;
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -45,6 +46,12 @@ const configs = [
     mode: "work",
     latitude: 59.92,
     title: "Outdoor Work (rainy week)",
+  },
+  {
+    type: "custom:outdoor-work-card",
+    mode: "carwash",
+    latitude: 59.9,
+    title: "Car Wash (wash tonight)",
   },
   { type: "custom:outdoor-work-card", mode: "carwash" },
   {
@@ -82,6 +89,7 @@ async function mountThemed(theme: keyof typeof THEMES) {
   for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
   document.body.appendChild(host);
 
+  const cards: (HTMLElement & { _infoOpen?: boolean })[] = [];
   for (const c of configs) {
     const el = document.createElement("outdoor-work-card") as HTMLElement & {
       setConfig: (c: object) => void;
@@ -90,10 +98,15 @@ async function mountThemed(theme: keyof typeof THEMES) {
     el.setConfig(c);
     host.appendChild(el);
     el.hass = hass;
+    cards.push(el);
   }
   await customElements.whenDefined("outdoor-work-card");
   // Let the async fetch + render chain settle.
   await new Promise((r) => setTimeout(r, 1500));
+  // Design F: capture the info popover open on one work + one carwash card.
+  cards[0]!._infoOpen = true;
+  cards[3]!._infoOpen = true;
+  await new Promise((r) => setTimeout(r, 100));
   return host;
 }
 
@@ -101,11 +114,50 @@ for (const theme of ["dark", "light"] as const) {
   test(`renders and screenshots all cards in ${theme} mode`, async () => {
     const host = await mountThemed(theme);
     const cards = host.querySelectorAll("outdoor-work-card");
-    expect(cards.length).toBe(4);
+    expect(cards.length).toBe(5);
     // Each card should have rendered its ha-card shell.
     for (const card of cards) {
       expect(card.shadowRoot?.querySelector("ha-card"), "ha-card mounted").toBeTruthy();
     }
+
+    // Design F: footer removed; provenance cluster (timestamp) in the header on every card.
+    for (const card of cards) {
+      const root = card.shadowRoot!;
+      expect(root.querySelector(".foot"), "no footer element").toBeNull();
+      expect(root.querySelector(".prov .ts"), "timestamp present").toBeTruthy();
+    }
+
+    // Popover forced open on work (idx 0) and carwash (idx 3): config-derived rules.
+    const workPop = cards[0]!.shadowRoot!.querySelector("#owc-pop")!;
+    expect(workPop, "work popover open").toBeTruthy();
+    const workKeys = [...workPop.querySelectorAll(".grid .k")].map((k) => k.textContent?.trim());
+    expect(workKeys).toContain("Weekday window");
+    expect(workKeys).toContain("Mow"); // default task listed
+    expect(workPop.querySelector(".src")?.textContent).toContain("MET Nordic 1 km");
+
+    const washPop = cards[3]!.shadowRoot!.querySelector("#owc-pop")!;
+    expect(washPop, "carwash popover open").toBeTruthy();
+    const washVals = [...washPop.querySelectorAll(".grid .v")].map((v) => v.textContent?.trim());
+    expect(
+      washVals.some((v) => v?.includes("0.5 mm/h")),
+      "ok_rain in popover",
+    ).toBe(true);
+
+    // Design E hero states: wash-tonight card (idx 2) vs a skip card (idx 3).
+    const okRoot = cards[2]!.shadowRoot!;
+    expect(okRoot.querySelector(".alert"), "no banner when tonight is the pick").toBeNull();
+    expect(okRoot.querySelector(".hero.rec"), "ok hero not tinted as recommendation").toBeNull();
+    expect(okRoot.querySelector(".hero.ok .cap")?.textContent?.trim()).toBe("Best evening to wash");
+    expect(okRoot.querySelector(".hero.ok .tradeoff"), "no trade-off in ok state").toBeNull();
+
+    const skipRoot = cards[3]!.shadowRoot!;
+    expect(skipRoot.querySelector(".alert .lbl")?.textContent?.trim()).toBe("Skip today");
+    expect(skipRoot.querySelector(".hero.rec .cap")?.textContent?.trim()).toBe("Wash on");
+    expect(
+      skipRoot.querySelector(".hero.rec .tradeoff strong.gain"),
+      "gain is bold + accent",
+    ).toBeTruthy();
+
     await page.screenshot({ element: host, path: `__screenshots__/cards-${theme}.png` });
   });
 }

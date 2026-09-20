@@ -26,6 +26,9 @@ export interface DayNames {
   full: string[];
 }
 
+/** A sentence fragment: plain text, or a bolded run (`gain` also takes the accent colour). */
+export type Seg = string | { b: string; gain?: boolean };
+
 const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const dayCache = new Map<Lang, DayNames>();
 
@@ -81,33 +84,68 @@ export interface Strings {
   rowDark: string;
   dusk: string;
   sunset: string;
-  taskPiece: (name: string, before: number, after?: number) => string;
-  footWork: (a: {
-    weekday: string;
-    weekend: string;
-    end: string;
-    tasks: string;
-    thr: number;
-    cap: number;
-    model: string;
-  }) => string;
+
+  // --- info popover (design F) ---
+  popHeadWash: string;
+  popHeadWork: string;
+  popWashFrom: string;
+  popHarmlessDay: string;
+  popHarmlessNight: string;
+  popRoadsDry: string;
+  popWeekdayWin: string;
+  popWeekendWin: string;
+  popIgnoreUnder: string;
+  popCountsRain: string;
+  popUpTo: (mm: number) => string;
+  popNightVal: (mm: number, from: string, until: string) => string;
+  popHours: (h: number) => string;
+  popMinutes: (m: number) => string;
+  popAboveRate: (mm: number) => string;
+  popDryBefore: (h: number) => string;
+  popDryBeforeAfter: (before: number, after: number) => string;
+  popSrc: (model: string) => string;
 
   // --- car wash mode ---
-  washTonight: string;
-  noGoodEvening: string;
-  skipToday: string;
   dash: string;
   nothingClean: string;
   cleanDays: (n: number, open: boolean) => string;
+  // hero — design E: alert banner + labelled recommendation + trade-off line
+  /** Uppercase red banner label. */
+  bannerLbl: string;
+  /** Banner body when tonight can't be washed at all. */
+  bannerRain: (washStart: string) => string;
+  /** Banner body when tonight is washable but nothing survives tomorrow (streak 0). */
+  bannerBrief: (describe: string) => string;
+  /** Banner body when tonight works but only briefly. */
+  bannerLasts: (n: number, describe: string) => string;
+  /** Banner body fallback when the breaking day is unknown. */
+  bannerLastsNoBreak: (n: number) => string;
+  /** Small uppercase caption above the recommended day. */
+  capBest: string;
+  capWashOn: string;
+  capOutlook: string;
+  /** Context line for the skip state: lead-in before the "stays clean …" tail. */
+  ctxSkipFrom: (washStart: string, waitDays: number) => string;
+  ctxStaysUntil: (describe: string) => string;
+  ctxStaysPast: string;
   whyOkBreak: (washStart: string, describe: string) => string;
   whyOkNoRain: (washStart: string) => string;
   whyNone: (okRain: number) => string;
-  whySkipHeadRain: string;
-  whySkipHeadLasts: (n: number) => string;
-  whySpoils: (describe: string) => string;
+  /** Trade-off line, as bold-aware segments. */
+  tradeoffFirst: (bestFull: string) => Seg[];
+  tradeoffBuys: (waitDays: number, gain: number, openGain: boolean) => Seg[];
+  tradeoffOnly: (waitDays: number) => Seg[];
   describe: (full: string, night: boolean, peak: string) => string;
   sectAsk: string;
   outTip: (streak: number, open: boolean) => string;
+  /** Tip when the wash evening itself is rained out (a "—" day). */
+  outDirty: string;
+  /** Headline sentence when the next rain event is known. */
+  outNextRain: (day: string, from: string, to: string, hours: number) => string;
+  statTotal: string;
+  statPeak: string;
+  unitMm: string; // "mm"
+  unitRate: string; // "mm/h" / "mm/t"
   tagTonight: string;
   tagBest: string;
   tagNow: string;
@@ -117,16 +155,8 @@ export interface Strings {
   whenEarlier: string;
   whenNight: string;
   whenDaytime: string;
+  washInfo: (kind: "clear" | "earlier" | "night" | "daytime", peak: string) => string;
   outDays: (streak: number, open: boolean) => string;
-  footWash: (a: {
-    washStart: string;
-    okRain: number;
-    from: string;
-    until: string;
-    nightMax: number;
-    model: string;
-  }) => string;
-
   // --- config defaults ---
   defWorkTitle: string;
   defWorkSub: string;
@@ -185,36 +215,75 @@ const EN: Strings = {
   rowDark: "dark",
   dusk: "dusk",
   sunset: "sunset",
-  taskPiece: (name, before, after) =>
-    `${name}: ${before} h dry before${after !== undefined ? ` and ${after} h after` : ""}`,
-  footWork: (a) =>
-    `Windows open ${a.weekday} on weekdays and ${a.weekend} on weekends and run until ${a.end}. ${a.tasks}. Rain above ${a.thr} mm/h counts. Bars cap at ${a.cap} h. Data: Open-Meteo (${a.model}).`,
 
-  washTonight: "Wash tonight",
-  noGoodEvening: "No good evening in sight",
-  skipToday: "Skip today",
+  popHeadWash: "How evenings are judged",
+  popHeadWork: "How days are judged",
+  popWashFrom: "Wash from",
+  popHarmlessDay: "Harmless by day",
+  popHarmlessNight: "Harmless at night",
+  popRoadsDry: "Roads dry for",
+  popWeekdayWin: "Weekday window",
+  popWeekendWin: "Weekend window",
+  popIgnoreUnder: "Ignore windows under",
+  popCountsRain: "Counts as rain",
+  popUpTo: (mm) => `up to ${mm} mm/h`,
+  popNightVal: (mm, from, until) => `up to ${mm} mm/h · ${from}–${until}`,
+  popHours: (h) => `${h} h`,
+  popMinutes: (m) => `${m} min`,
+  popAboveRate: (mm) => `above ${mm} mm/h`,
+  popDryBefore: (h) => `${h} h dry before`,
+  popDryBeforeAfter: (before, after) => `${before} h before · ${after} h after`,
+  popSrc: (model) => `Open-Meteo · ${model}`,
+
   dash: "—",
   nothingClean: "nothing stays clean",
   cleanDays: (n, open) =>
     n === 0 && !open
       ? "clean, but not past tomorrow"
       : `${n}${open ? "+" : ""} clean ${n === 1 && !open ? "day" : "days"}`,
+  bannerLbl: "Skip today",
+  bannerRain: (ws) => `rain around ${ws} rules out washing tonight`,
+  bannerBrief: (desc) => `a wash now won't last the day — ${desc}`,
+  bannerLasts: (n, desc) => `a wash now lasts ${n} ${n === 1 ? "day" : "days"} — ${desc}`,
+  bannerLastsNoBreak: (n) => `a wash now lasts ${n} ${n === 1 ? "day" : "days"}`,
+  capBest: "Best evening to wash",
+  capWashOn: "Wash on",
+  capOutlook: "Outlook",
+  ctxSkipFrom: (ws, w) => `From ${ws}, ${w === 1 ? "tomorrow" : `${w} days from now`} · `,
+  ctxStaysUntil: (desc) => `stays clean until ${desc}.`,
+  ctxStaysPast: "stays clean past the end of the outlook.",
   whyOkBreak: (ws, desc) => `Dry from ${ws} tonight. Stays clean until ${desc}.`,
   whyOkNoRain: (ws) => `Dry from ${ws} tonight, and no spoiling rain in the whole outlook.`,
   whyNone: (okRain) =>
     `Every evening in the outlook is followed by rain above ${okRain} mm/h within a day.`,
-  whySkipHeadRain: "Rain tonight rules out washing today",
-  whySkipHeadLasts: (n) =>
-    n === 0
-      ? `A wash today won't survive tomorrow`
-      : `A wash today lasts only ${n} ${n === 1 ? "day" : "days"}`,
-  whySpoils: (desc) => ` — ${desc} spoils it.`,
+  tradeoffFirst: (best) => [`${best} is the first evening that works.`],
+  tradeoffBuys: (w, gain, open) => [
+    "Waiting ",
+    { b: `${w} ${w === 1 ? "day" : "days"}` },
+    " buys ",
+    { b: `${gain}${open ? "+" : ""} more`, gain: true },
+    " clean days.",
+  ],
+  tradeoffOnly: (w) => [
+    "Waiting ",
+    { b: `${w} ${w === 1 ? "day" : "days"}` },
+    " buys only ",
+    { b: "1 more", gain: true },
+    " clean day — tonight is nearly as good.",
+  ],
   describe: (full, night, peak) => `${full}'s ${night ? "night" : "daytime"} rain (${peak} mm/h)`,
   sectAsk: "When to wash?",
   outTip: (streak, open) =>
     streak === 0 && !open
       ? "No upcoming dry-weather streak"
-      : `${streak}${open ? "+" : ""} day${streak === 1 && !open ? "" : "s"} until next real rainfall`,
+      : `${streak}+ days until next real rainfall`,
+  outDirty: "Too wet to wash — rain during or right after the wash window",
+  outNextRain: (day, from, to, hours) =>
+    `Next real rain on ${day} between ${from}–${to} (${hours} h)`,
+  statTotal: "Total",
+  statPeak: "Peak",
+  unitMm: "mm",
+  unitRate: "mm/h",
   tagTonight: "Tonight",
   tagBest: "Best",
   tagNow: "Now",
@@ -224,9 +293,15 @@ const EN: Strings = {
   whenEarlier: "earlier",
   whenNight: "night",
   whenDaytime: "daytime",
+  washInfo: (kind, peak) =>
+    kind === "clear"
+      ? "No rain forecast — the car stays clean all day."
+      : kind === "earlier"
+        ? `Peak ${peak} mm/h falls before wash time, so the evening is still washable.`
+        : kind === "night"
+          ? `Peak ${peak} mm/h falls overnight — gentle enough to tolerate.`
+          : `Peak ${peak} mm/h during the day — heavy enough to dirty a clean car.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  footWash: (a) =>
-    `Washing from ${a.washStart}. Rain up to ${a.okRain} mm/h is fine; heavier daytime rain ends the clean streak. Night (${a.from}–${a.until}) tolerates up to ${a.nightMax} mm/h. Data: Open-Meteo (${a.model}).`,
 
   defWorkTitle: "Outdoor Work",
   defWorkSub: "Dry-ground windows after work",
@@ -314,36 +389,75 @@ const NB: Strings = {
   rowDark: "mørkt",
   dusk: "skumring",
   sunset: "solnedgang",
-  taskPiece: (name, before, after) =>
-    `${name}: ${before} t tørt før${after !== undefined ? ` og ${after} t etter` : ""}`,
-  footWork: (a) =>
-    `Vinduer åpner ${a.weekday} på hverdager og ${a.weekend} i helgene og varer til ${a.end}. ${a.tasks}. Nedbør over ${a.thr} mm/t teller. Søyler stopper ved ${a.cap} t. Data: Open-Meteo (${a.model}).`,
 
-  washTonight: "Vask i kveld",
-  noGoodEvening: "Ingen god kveld i sikte",
-  skipToday: "Dropp i dag",
+  popHeadWash: "Slik vurderes kveldene",
+  popHeadWork: "Slik vurderes dagene",
+  popWashFrom: "Vask fra",
+  popHarmlessDay: "Ufarlig på dagtid",
+  popHarmlessNight: "Ufarlig om natten",
+  popRoadsDry: "Veier tørre i",
+  popWeekdayWin: "Hverdagsvindu",
+  popWeekendWin: "Helgevindu",
+  popIgnoreUnder: "Ignorer vinduer under",
+  popCountsRain: "Teller som regn",
+  popUpTo: (mm) => `opptil ${mm} mm/t`,
+  popNightVal: (mm, from, until) => `opptil ${mm} mm/t · ${from}–${until}`,
+  popHours: (h) => `${h} t`,
+  popMinutes: (m) => `${m} min`,
+  popAboveRate: (mm) => `over ${mm} mm/t`,
+  popDryBefore: (h) => `${h} t tørt før`,
+  popDryBeforeAfter: (before, after) => `${before} t før · ${after} t etter`,
+  popSrc: (model) => `Open-Meteo · ${model}`,
+
   dash: "—",
   nothingClean: "ingenting holder seg rent",
   cleanDays: (n, open) =>
     n === 0 && !open
       ? "rent, men ikke forbi i morgen"
       : `${n}${open ? "+" : ""} rene ${n === 1 && !open ? "dag" : "dager"}`,
+  bannerLbl: "Dropp i dag",
+  bannerRain: (ws) => `regn rundt ${ws} utelukker vask i kveld`,
+  bannerBrief: (desc) => `en vask nå holder ikke dagen ut — ${desc}`,
+  bannerLasts: (n, desc) => `en vask nå varer ${n} ${n === 1 ? "dag" : "dager"} — ${desc}`,
+  bannerLastsNoBreak: (n) => `en vask nå varer ${n} ${n === 1 ? "dag" : "dager"}`,
+  capBest: "Beste kveld å vaske",
+  capWashOn: "Vask",
+  capOutlook: "Utsikter",
+  ctxSkipFrom: (ws, w) => `Fra ${ws}, ${w === 1 ? "i morgen" : `om ${w} dager`} · `,
+  ctxStaysUntil: (desc) => `holder seg rent til ${desc}.`,
+  ctxStaysPast: "holder seg rent forbi slutten av varselet.",
   whyOkBreak: (ws, desc) => `Tørt fra ${ws} i kveld. Holder seg rent til ${desc}.`,
   whyOkNoRain: (ws) => `Tørt fra ${ws} i kveld, og ingen ødeleggende nedbør i hele varselet.`,
   whyNone: (okRain) => `Hver kveld i varselet følges av nedbør over ${okRain} mm/t innen et døgn.`,
-  whySkipHeadRain: "Regn i kveld gjør vask i dag nytteløst",
-  whySkipHeadLasts: (n) =>
-    n === 0
-      ? `En vask i dag overlever ikke til i morgen`
-      : `En vask i dag varer bare ${n} ${n === 1 ? "dag" : "dager"}`,
-  whySpoils: (desc) => ` — ${desc} ødelegger det.`,
+  tradeoffFirst: (best) => [`${best} er første kveld som funker.`],
+  tradeoffBuys: (w, gain, open) => [
+    "Å vente ",
+    { b: `${w} ${w === 1 ? "dag" : "dager"}` },
+    " gir ",
+    { b: `${gain}${open ? "+" : ""} flere`, gain: true },
+    " rene dager.",
+  ],
+  tradeoffOnly: (w) => [
+    "Å vente ",
+    { b: `${w} ${w === 1 ? "dag" : "dager"}` },
+    " gir bare ",
+    { b: "1 dag", gain: true },
+    " mer — i kveld er nesten like bra.",
+  ],
   describe: (full, night, peak) =>
     `${night ? "nattregn" : "regn på dagen"} ${full.toLowerCase()} (${peak} mm/t)`,
   sectAsk: "Når skal du vaske?",
   outTip: (streak, open) =>
     streak === 0 && !open
       ? "Ingen kommende tørrværsperiode"
-      : `${streak}${open ? "+" : ""} ${streak === 1 && !open ? "dag" : "dager"} til neste ordentlige nedbør`,
+      : `${streak}+ dager til neste ordentlige nedbør`,
+  outDirty: "For vått til å vaske — nedbør under eller rett etter vaskevinduet",
+  outNextRain: (day, from, to, hours) =>
+    `Neste ordentlige nedbør ${day} mellom ${from}–${to} (${hours} t)`,
+  statTotal: "Totalt",
+  statPeak: "Topp",
+  unitMm: "mm",
+  unitRate: "mm/t",
   tagTonight: "I kveld",
   tagBest: "Best",
   tagNow: "Nå",
@@ -353,9 +467,15 @@ const NB: Strings = {
   whenEarlier: "tidligere",
   whenNight: "natt",
   whenDaytime: "dag",
+  washInfo: (kind, peak) =>
+    kind === "clear"
+      ? "Ingen nedbør meldt — bilen holder seg ren hele dagen."
+      : kind === "earlier"
+        ? `Topp ${peak} mm/t faller før vasketid, så kvelden er fortsatt vaskbar.`
+        : kind === "night"
+          ? `Topp ${peak} mm/t faller om natten — mildt nok til å tåles.`
+          : `Topp ${peak} mm/t på dagtid — kraftig nok til å skitne til en ren bil.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  footWash: (a) =>
-    `Vask fra ${a.washStart}. Nedbør opptil ${a.okRain} mm/t går fint; kraftigere dagregn avslutter den rene perioden. Natt (${a.from}–${a.until}) tåler opptil ${a.nightMax} mm/t. Data: Open-Meteo (${a.model}).`,
 
   defWorkTitle: "Utearbeid",
   defWorkSub: "Tørre vinduer etter jobb",

@@ -233,6 +233,17 @@ export interface WashOptions {
 
 export type WashIcon = "sun" | "moon" | "drop" | "rain";
 
+export interface RainEvent {
+  /** UTC instant the rain starts. */
+  at: number;
+  /** How many consecutive hours it stays above the threshold. */
+  hours: number;
+  /** Peak mm/h during the event. */
+  peak: number;
+  /** Total accumulated mm over the event. */
+  total: number;
+}
+
 export interface WashDay extends DayBase {
   /** Peak mm/h on this day. */
   peak: number;
@@ -248,6 +259,8 @@ export interface WashDay extends DayBase {
   streak: number;
   /** Streak ran to the end of the data — it's at least this long. */
   openEnded: boolean;
+  /** The next disqualifying rain after the wash evening (null if none within range). */
+  nextRain: RainEvent | null;
   icon: WashIcon;
 }
 
@@ -256,6 +269,8 @@ export interface WashResult {
   bestIdx: number;
   /** Index of the day whose rain ends a wash-today streak, -1 if none. */
   todayBreakIdx: number;
+  /** Index of the day whose rain ends the recommended evening's streak, -1 if open-ended. */
+  bestBreakIdx: number;
 }
 
 export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
@@ -278,6 +293,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     peak: number;
     peakNight: boolean;
     hasData: boolean;
+    evening: number;
   };
   const info: Info[] = base.map((b) => {
     const dayEnd = b.dayStart + 24 * H;
@@ -304,7 +320,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       }
     }
     if (!hasData) tolerated = eveningTolerated = false;
-    return { tolerated, eveningTolerated, peak, peakNight, hasData };
+    return { tolerated, eveningTolerated, peak, peakNight, hasData, evening };
   });
 
   const streakFrom = (s: number): { n: number; open: boolean } => {
@@ -318,6 +334,24 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     }
     // Ran past the evaluated days without hitting rain: it's *at least* n.
     return { n, open: true };
+  };
+
+  // The next disqualifying rain after the wash evening (null when the evening
+  // itself is spoiled or nothing rains within the data).
+  const nextRainFrom = (s: number): RainEvent | null => {
+    const inf = info[s]!;
+    if (!inf.eveningTolerated) return null;
+    const start = hours.findIndex((h) => h.t >= inf.evening && bad(h));
+    if (start < 0) return null;
+    let end = start;
+    let peak = 0;
+    let total = 0;
+    while (end < hours.length && bad(hours[end]!)) {
+      peak = Math.max(peak, hours[end]!.mm);
+      total += hours[end]!.mm;
+      end++;
+    }
+    return { at: hours[start]!.t, hours: end - start, peak, total };
   };
 
   const days: WashDay[] = base.slice(0, o.days).map((b, i) => {
@@ -337,6 +371,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       eveningTolerated: inf.eveningTolerated,
       streak: st.n,
       openEnded: st.open,
+      nextRain: nextRainFrom(i),
       icon,
     };
   });
@@ -350,5 +385,10 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   const breakIdx = t0.n + 1; // wash day no longer counted, so the break sits one day later
   const todayBreakIdx = t0.open ? -1 : breakIdx < base.length ? breakIdx : -1;
 
-  return { days, bestIdx, todayBreakIdx };
+  // Same, for the recommended evening: the day whose rain ends its streak.
+  const tb = streakFrom(bestIdx);
+  const bb = bestIdx + tb.n + 1;
+  const bestBreakIdx = tb.open ? -1 : bb < base.length ? bb : -1;
+
+  return { days, bestIdx, todayBreakIdx, bestBreakIdx };
 }

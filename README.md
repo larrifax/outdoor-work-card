@@ -38,6 +38,8 @@ mode: work # or: carwash
 
 Location defaults to your Home Assistant home coordinates and times are evaluated in your HA time zone.
 
+The rules the card applies (windows, thresholds, dry runways) live behind the `?` button in the card header, generated from your config so they always match the logic.
+
 ### Outdoor-work mode
 
 ```yaml
@@ -78,7 +80,7 @@ night_until: "06:00"
 dry_roads_hours: 2 # no heavy rain this long before the wash (wet roads)
 ```
 
-Each column's bottom number is the clean days you'd get by washing **that** evening. The streak from an evening counts that day and every following day whose rain stays under the thresholds; `4+` means it runs past the end of the outlook. The hero picks the longest streak (earliest on ties) and explains what ends a wash tonight.
+Each column's bottom number is the clean days you'd get by washing **that** evening. The streak from an evening counts that day and every following day whose rain stays under the thresholds; `4+` means it runs past the end of the outlook. The hero picks the longest streak (earliest on ties) and adapts to one of three states. When **tonight is the pick**, it reads "Best evening to wash → Tonight" with the clean-days count and what eventually ends the streak. When a **later evening wins**, a red "Skip today" banner says why tonight falls short, the hero recommends the better day, and a trade-off line spells out how many extra clean days waiting buys. When **no evening survives the outlook**, it shows "Outlook → nothing stays clean" and why.
 
 ### Common options
 
