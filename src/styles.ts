@@ -4,6 +4,7 @@ export const styles = css`
   :host {
     --owc-amber: #f5b942;
     --owc-red: #ef6b6b;
+    --owc-danger: #c81e1e;
     --owc-text: var(--primary-text-color, #e8eaed);
     --owc-text-2: var(--secondary-text-color, #9aa2ad);
     --owc-line: color-mix(in srgb, var(--owc-text) 9%, transparent);
@@ -14,6 +15,7 @@ export const styles = css`
     --owc-accent-text: color-mix(in srgb, var(--owc-accent) 70%, var(--owc-text));
     --owc-amber-text: color-mix(in srgb, var(--owc-amber) 62%, var(--owc-text));
     --owc-red-text: color-mix(in srgb, var(--owc-red) 75%, var(--owc-text));
+    --owc-danger-text: color-mix(in srgb, var(--owc-danger) 80%, var(--owc-text));
     display: block;
   }
   ha-card {
@@ -649,7 +651,7 @@ export const styles = css`
   .pop .scale {
     margin-top: 7px;
     display: grid;
-    grid-template-columns: auto 1fr 1fr 1fr;
+    grid-template-columns: auto 1fr 1fr 1fr 1fr;
     column-gap: 8px;
     row-gap: 5px;
     font-size: 11px;
@@ -667,6 +669,10 @@ export const styles = css`
   .pop .scale .c2 {
     font-weight: 700;
     color: var(--owc-red-text);
+  }
+  .pop .scale .c3 {
+    font-weight: 700;
+    color: var(--owc-danger-text);
   }
   .pop .scale .k {
     display: flex;
@@ -737,6 +743,26 @@ export const styles = css`
   }
   .gbadge.l2 {
     background: var(--owc-red);
+  }
+  /* no forecast for some commute hour: grade unknown */
+  .gbadge.unknown {
+    background: none;
+    border: 1px dashed var(--secondary-text-color);
+    color: var(--secondary-text-color);
+  }
+  /* F: dark-red badge with light text so it reads apart from D/E */
+  .gbadge.f,
+  .pop .gb.f {
+    background: var(--owc-danger);
+    color: #fff;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--owc-danger) 35%, transparent);
+  }
+  .chero.f {
+    background: color-mix(in srgb, var(--owc-danger) 16%, transparent);
+    border-color: var(--owc-danger);
+  }
+  .chero.f .cap {
+    color: var(--owc-danger-text);
   }
   .chero .gbadge {
     width: 56px;
@@ -852,6 +878,22 @@ export const styles = css`
   .tile.l2 {
     background: color-mix(in srgb, var(--owc-red) 9%, transparent);
   }
+  .tile.l3 {
+    background: color-mix(in srgb, var(--owc-danger) 28%, transparent);
+    box-shadow: inset 0 0 0 1px var(--owc-danger);
+  }
+  .tile.l3 .hh {
+    color: var(--owc-danger-text);
+    font-weight: 700;
+  }
+  .tile:not(.missing) {
+    cursor: help;
+  }
+  .tile .hh {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
   .tile.passed {
     opacity: 0.5;
   }
@@ -879,7 +921,8 @@ export const styles = css`
   }
   .ic0,
   .ic1,
-  .ic2 {
+  .ic2,
+  .ic3 {
     display: inline-flex;
   }
   .ic0 {
@@ -888,8 +931,17 @@ export const styles = css`
   .ic1 {
     color: var(--owc-amber-text);
   }
-  .ic2 {
+  .ic2,
+  .ic3 {
     color: var(--owc-red-text);
+  }
+  .mid .tot {
+    font-weight: 500;
+    color: var(--owc-text-2);
+  }
+  .mid.flag {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1.5px var(--owc-red);
   }
   .mid {
     border-radius: 7px;

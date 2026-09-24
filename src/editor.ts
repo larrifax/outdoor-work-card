@@ -5,12 +5,14 @@
  */
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { CardConfig, HassLike } from "./types";
-import { pickLang, strings, type EditorStrings } from "./i18n";
+import type { CardConfig, HassLike, Mode } from "./types";
+import { pickLang, strings, dayNames, type EditorStrings, type Lang } from "./i18n";
+import { resolve, parseMode } from "./config";
+import { matchPreset, PRESETS, type PresetId } from "./commute";
 
 type Schema = Array<Record<string, unknown>>;
 
-const COMMON = (e: EditorStrings): Schema => [
+const COMMON = (e: EditorStrings, commute: boolean): Schema => [
   {
     name: "mode",
     selector: {
@@ -36,7 +38,10 @@ const COMMON = (e: EditorStrings): Schema => [
     type: "grid",
     name: "",
     schema: [
-      { name: "days", selector: { number: { min: 3, max: 10, mode: "box" } } },
+      // Commute mode always shows five workdays, so "days" is hidden there.
+      ...(commute
+        ? []
+        : [{ name: "days", selector: { number: { min: 3, max: 10, mode: "box" } } }]),
       {
         name: "refresh_minutes",
         selector: { number: { min: 10, max: 720, mode: "box", unit_of_measurement: "min" } },
@@ -153,7 +158,7 @@ const WASH: Schema = [
   },
 ];
 
-const COMMUTE: Schema = [
+const COMMUTE = (e: EditorStrings, lang: Lang): Schema => [
   {
     type: "grid",
     name: "",
@@ -169,6 +174,20 @@ const COMMUTE: Schema = [
       { name: "home_start", selector: { time: {} } },
       { name: "home_end", selector: { time: {} } },
     ],
+  },
+  {
+    name: "preset",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "fair", label: e.presetFair },
+          { value: "everyday", label: e.presetEveryday },
+          { value: "all", label: e.presetAll },
+          { value: "custom", label: e.presetCustom },
+        ],
+      },
+    },
   },
   {
     type: "grid",
@@ -208,15 +227,11 @@ const COMMUTE: Schema = [
       select: {
         multiple: true,
         mode: "list",
-        options: [
-          { value: 1, label: "Monday" },
-          { value: 2, label: "Tuesday" },
-          { value: 3, label: "Wednesday" },
-          { value: 4, label: "Thursday" },
-          { value: 5, label: "Friday" },
-          { value: 6, label: "Saturday" },
-          { value: 7, label: "Sunday" },
-        ],
+        // ISO 1 = Mon … 7 = Sun; dayNames is indexed 0 = Sun.
+        options: [1, 2, 3, 4, 5, 6, 7].map((v) => ({
+          value: v,
+          label: dayNames(lang).full[v % 7],
+        })),
       },
     },
   },
@@ -248,15 +263,19 @@ export class OutdoorWorkCardEditor extends LitElement {
     return strings(pickLang(this.hass)).ed;
   }
 
+  private get _lang(): Lang {
+    return pickLang(this.hass);
+  }
+
   private get _schema(): Schema {
     const e = this._t;
-    const mode =
-      this._config?.mode === "carwash"
-        ? "carwash"
-        : this._config?.mode === "commute"
-          ? "commute"
-          : "work";
-    return [...COMMON(e), ...(mode === "carwash" ? WASH : mode === "commute" ? COMMUTE : WORK(e))];
+    const mode = parseMode(this._config?.mode);
+    const byMode: Record<Mode, () => Schema> = {
+      carwash: () => WASH,
+      commute: () => COMMUTE(e, this._lang),
+      work: () => WORK(e),
+    };
+    return [...COMMON(e, mode === "commute"), ...byMode[mode]()];
   }
 
   private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
@@ -265,13 +284,25 @@ export class OutdoorWorkCardEditor extends LitElement {
   private _changed(ev: CustomEvent): void {
     ev.stopPropagation();
     const value = { ...ev.detail?.value } as Record<string, unknown>;
-    // Drop empty strings so defaults apply.
-    for (const k of Object.keys(value)) {
-      if (value[k] === "" || value[k] === null) delete value[k];
+    // Cleared fields: remove the key from the config too, so the default applies.
+    const cleared = Object.keys(value).filter((k) => value[k] === "" || value[k] === null);
+    // Rider preset is editor-only: a newly picked preset writes its four thresholds;
+    // otherwise (threshold edit, or Custom) the value is ignored and recomputed on render.
+    const preset = value["preset"] as PresetId | "custom" | undefined;
+    delete value["preset"];
+    if (preset && preset !== "custom" && preset !== this._preset(this._config)) {
+      const p = PRESETS[preset];
+      Object.assign(value, {
+        rain_fine: p.rainFine,
+        rain_ok: p.rainOk,
+        wind_fine: p.windFine,
+        wind_ok: p.windOk,
+      });
     }
+    const merged: Record<string, unknown> = { ...this._config, ...value };
+    for (const k of cleared) delete merged[k];
     const next = {
-      ...this._config,
-      ...value,
+      ...merged,
       type: this._config?.type ?? "custom:outdoor-work-card",
     } as CardConfig;
     // Keep only the keys of the active mode + common ones tidy.
@@ -285,11 +316,20 @@ export class OutdoorWorkCardEditor extends LitElement {
     );
   }
 
+  /** Preset matching the effective (config or default) thresholds. */
+  private _preset(c: CardConfig | undefined) {
+    return matchPreset(resolve(c ?? { type: "" }, this.hass));
+  }
+
   protected override render(): TemplateResult | typeof nothing {
     if (!this.hass || !this._config) return nothing;
     const e = this._t;
-    const data = { mode: "work", ...this._config } as Record<string, unknown>;
-    const isWork = data["mode"] !== "carwash" && data["mode"] !== "commute";
+    const data = {
+      mode: "work",
+      ...this._config,
+      preset: this._preset(this._config),
+    } as Record<string, unknown>;
+    const isWork = parseMode(data["mode"]) === "work";
     return html`
       <ha-form
         .hass=${this.hass}

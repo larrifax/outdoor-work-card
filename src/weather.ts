@@ -51,7 +51,7 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const p = new URLSearchParams({
     latitude: req.lat.toFixed(4),
     longitude: req.lon.toFixed(4),
-    hourly: "precipitation,wind_speed_10m",
+    hourly: "precipitation,wind_speed_10m,wind_gusts_10m",
     wind_speed_unit: "ms",
     models: req.model,
     past_days: String(req.pastDays),
@@ -66,10 +66,12 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const times: number[] = json.hourly?.time ?? [];
   const mm: (number | null)[] = json.hourly?.precipitation ?? [];
   const ws: (number | null)[] = json.hourly?.wind_speed_10m ?? [];
+  const wg: (number | null)[] = json.hourly?.wind_gusts_10m ?? [];
   const now = Date.now();
   const hours: HourPoint[] = times.map((t, i) => {
     const ms = t * 1000;
-    return { t: ms, mm: mm[i] ?? 0, wind: ws[i] ?? 0, past: ms + 3_600_000 <= now };
+    const wind = ws[i] ?? 0;
+    return { t: ms, mm: mm[i] ?? 0, wind, gust: wg[i] ?? wind, past: ms + 3_600_000 <= now };
   });
   return { hours, fetchedAt: now, model: req.model };
 }

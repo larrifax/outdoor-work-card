@@ -63,10 +63,10 @@ export interface CardConfig {
   /** "HH:MM" bounds of the midday context window (default 09:00–15:00). */
   midday_start?: string;
   midday_end?: string;
-  /** Rain (mm/h) that is still "fine" / still "tolerable" for a cyclist (default 0.2 / 1.0). */
+  /** Rain (mm/h) that is still "fine" / still "tolerable" for a cyclist (default 0.2 / 0.8). */
   rain_fine?: number;
   rain_ok?: number;
-  /** Wind (m/s) that is still "fine" / still "tolerable" (default 6 / 10). */
+  /** Effective wind (m/s, see commute.ts) that is still "fine" / still "tolerable" (default 6 / 10). */
   wind_fine?: number;
   wind_ok?: number;
   /** ISO weekdays to show, 1 = Monday … 7 = Sunday (default [1,2,3,4,5]). */
@@ -80,6 +80,8 @@ export interface HourPoint {
   mm: number;
   /** Mean 10 m wind speed during this hour, m/s. */
   wind: number;
+  /** 10 m gust speed during this hour, m/s. Absent → treat as `wind`. */
+  gust?: number;
   /** True when this hour is in the past (from the archive part of the response). */
   past: boolean;
 }

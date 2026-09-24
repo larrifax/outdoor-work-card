@@ -63,3 +63,32 @@ export const RAINY = build([
   ["2026-09-21T23:00", 0.4],
   ["2026-09-23T04:00", 1.0],
 ]);
+
+// Commute scenario (keyed by latitude 59.93): Wed F (storm gusts home), Thu B
+// with a flagged wet midday, Fri D, Mon C, Tue A with gusts that lift the
+// effective wind above the mean without leaving "fine".
+function commute() {
+  const base = build([
+    ["2026-09-17T08:00", 0.4],
+    ["2026-09-17T11:00", 1.2],
+    ["2026-09-17T12:00", 2.4],
+    ["2026-09-17T13:00", 0.9],
+    ["2026-09-18T07:00", 1.6],
+    ["2026-09-18T08:00", 0.6],
+    ["2026-09-21T08:00", 0.5],
+    ["2026-09-21T16:00", 0.4],
+  ]);
+  const wind = base.hourly.time.map(() => 3);
+  const gusts = base.hourly.time.map(() => 5);
+  const set = (iso: string, w: number, g: number) => {
+    const i = base.hourly.time.indexOf(Date.parse(iso + "+02:00") / 1000);
+    wind[i] = w;
+    gusts[i] = g;
+  };
+  set("2026-09-16T16:00", 9, 18);
+  set("2026-09-16T17:00", 12, 26);
+  set("2026-09-22T07:00", 4, 9);
+  set("2026-09-22T17:00", 5, 9.5);
+  return { hourly: { ...base.hourly, wind_speed_10m: wind, wind_gusts_10m: gusts } };
+}
+export const COMMUTE = commute();

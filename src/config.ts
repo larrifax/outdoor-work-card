@@ -1,5 +1,6 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
 import { parseHM } from "./time";
+import { PRESETS } from "./commute";
 import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
 export function defaultTasks(t: ReturnType<typeof strings>): TaskConfig[] {
@@ -47,6 +48,9 @@ export interface Resolved {
   workdays: number[];
 }
 
+/** Unknown or missing mode falls back to work. */
+export const parseMode = (m: unknown): Mode => (m === "carwash" || m === "commute" ? m : "work");
+
 /** minutes-after-midnight → "HH:MM" */
 export const fmt = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -60,7 +64,7 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
   const lang = pickLang(hass);
   const t = strings(lang);
   const names = dayNames(lang);
-  const mode: Mode = c.mode === "carwash" ? "carwash" : c.mode === "commute" ? "commute" : "work";
+  const mode = parseMode(c.mode);
   const lat = num(c.latitude, hass?.config?.latitude ?? 59.91, -90, 90);
   const lon = num(c.longitude, hass?.config?.longitude ?? 10.75, -180, 180);
   const tz = hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -89,8 +93,9 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     Array.isArray(c.workdays) && c.workdays.length
       ? [...new Set(c.workdays.map((n) => Math.round(num(n, 1, 1, 7))))].sort()
       : [1, 2, 3, 4, 5];
-  const rainFine = num(c.rain_fine, 0.2, 0, 20);
-  const windFine = num(c.wind_fine, 6, 0, 40);
+  const def = PRESETS.everyday;
+  const rainFine = num(c.rain_fine, def.rainFine, 0, 20);
+  const windFine = num(c.wind_fine, def.windFine, 0, 40);
 
   const tasks =
     Array.isArray(c.tasks) && c.tasks.length
@@ -108,18 +113,22 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     mode,
     title:
       c.title ??
-      (mode === "carwash"
-        ? t.defWashTitle
-        : mode === "commute"
-          ? t.defCommuteTitle
-          : t.defWorkTitle),
+      (
+        {
+          carwash: t.defWashTitle,
+          commute: t.defCommuteTitle,
+          work: t.defWorkTitle,
+        } satisfies Record<Mode, string>
+      )[mode],
     subtitle:
       c.subtitle ??
-      (mode === "carwash"
-        ? t.defWashSub
-        : mode === "commute"
-          ? t.defCommuteSub(fmt(toWork[0]), fmt(toWork[1]), fmt(home[0]), fmt(home[1]))
-          : t.defWorkSub),
+      (
+        {
+          carwash: t.defWashSub,
+          commute: t.defCommuteSub(fmt(toWork[0]), fmt(toWork[1]), fmt(home[0]), fmt(home[1])),
+          work: t.defWorkSub,
+        } satisfies Record<Mode, string>
+      )[mode],
     lat,
     lon,
     tz,
@@ -143,9 +152,9 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     home,
     midday,
     rainFine,
-    rainOk: Math.max(rainFine, num(c.rain_ok, 1.0, 0, 20)),
+    rainOk: Math.max(rainFine, num(c.rain_ok, def.rainOk, 0, 20)),
     windFine,
-    windOk: Math.max(windFine, num(c.wind_ok, 10, 0, 40)),
+    windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
     workdays,
   };
 }
