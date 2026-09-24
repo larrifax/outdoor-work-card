@@ -33,7 +33,7 @@ Add the card from the dashboard editor (search _Outdoor Work_). The visual edito
 
 ```yaml
 type: custom:outdoor-work-card
-mode: work # or: carwash
+mode: work # or: carwash, commute
 ```
 
 Location defaults to your Home Assistant home coordinates and times are evaluated in your HA time zone.
@@ -81,6 +81,53 @@ dry_roads_hours: 2 # no heavy rain this long before the wash (wet roads)
 ```
 
 Each column's bottom number is the clean days you'd get by washing **that** evening. The streak from an evening counts that day and every following day whose rain stays under the thresholds; `4+` means it runs past the end of the outlook. The hero picks the longest streak (earliest on ties) and adapts to one of three states. When **tonight is the pick**, it reads "Best evening to wash → Tonight" with the clean-days count and what eventually ends the streak. When a **later evening wins**, a red "Skip today" banner says why tonight falls short, the hero recommends the better day, and a trade-off line spells out how many extra clean days waiting buys. When **no evening survives the outlook**, it shows "Outlook → nothing stays clean" and why.
+
+### Commute mode
+
+```yaml
+type: custom:outdoor-work-card
+mode: commute
+to_work_start: "07:00"
+to_work_end: "09:00"
+home_start: "16:00"
+home_end: "18:00"
+midday_start: "09:00" # midday window: flag only, never changes the grade
+midday_end: "15:00"
+rain_fine: 0.2 # mm/h still fine / still tolerable
+rain_ok: 0.8
+wind_fine: 6 # effective wind, m/s
+wind_ok: 10
+workdays: [1, 2, 3, 4, 5] # ISO weekdays
+```
+
+Every commute hour gets a rain and a wind level: fine, tolerable, bad or **dangerous**. Wind is the **effective wind** — the 10 m mean, or 60% of the gust speed when gusts are unusually strong for the mean. In steady wind it equals the mean; `wind_fine` / `wind_ok` compare against it. Tap or hover a tile to see rain, effective, mean and gust values.
+
+An hour is dangerous when rain is above 8 mm/h or effective wind is above 14 m/s (≈ gusts above 23 m/s), whatever your thresholds are.
+
+Day grade, from the two commutes only (each judged by its worst hour):
+
+| Grade | Meaning                     |
+| ----- | --------------------------- |
+| A     | both commutes fine          |
+| B     | one commute tolerable       |
+| C     | both commutes tolerable     |
+| D     | one commute bad             |
+| E     | both commutes bad           |
+| F     | a commute hour is dangerous |
+
+The midday column shows peak and total rain. On A–C days it gets a red outline — and the reason line says "consider home office" — when one midday hour is above `rain_ok` or the midday total is above 3 × `rain_ok`, since rain may drift into a commute.
+
+The editor's **Rider type** picker fills the four thresholds; you can then fine-tune them. Config stores only the four numbers:
+
+| Preset             | `rain_fine` | `rain_ok` | `wind_fine` | `wind_ok` |
+| ------------------ | ----------- | --------- | ----------- | --------- |
+| Fair-weather       | 0.1         | 0.3       | 5           | 8         |
+| Everyday (default) | 0.2         | 0.8       | 6           | 10        |
+| All-weather        | 0.5         | 2.0       | 8           | 12        |
+
+Values are 10 m model winds; don't correct them to rider height. Snow and ice are not assessed yet.
+
+> Upgrading: `rain_ok` now defaults to 0.8 (was 1.0), `wind_*` compare against effective wind, midday no longer changes the grade, and there's a new F grade.
 
 ### Common options
 
