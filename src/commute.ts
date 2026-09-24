@@ -54,6 +54,8 @@ export interface CommutePhrases {
   dryCalm: string;
   /** appended to the reason when the midday window is flagged */
   middayFlag: string;
+  /** shown when a commute hour has no forecast (day past the horizon) */
+  noData: string;
 }
 
 export interface CommuteOptions {
@@ -137,6 +139,8 @@ export interface CommuteDay {
   midday: MiddaySummary;
   home: CommuteWindow;
   grade: Grade;
+  /** some commute hour has no forecast: `grade` covers only the known hours, show it as unknown */
+  unknown: boolean;
   /** traffic light for the grade: 0 green, 1 amber, 2 red */
   light: Light;
   /** short human reason, e.g. "light rain to work · breezy home" */
@@ -194,6 +198,7 @@ const EN_PHRASES: CommutePhrases = {
   sep: " · ",
   dryCalm: "dry and calm both ways",
   middayFlag: " · heavy rain midday — consider home office",
+  noData: "no forecast yet",
 };
 
 export function gradeToLight(g: Grade): Light {
@@ -244,9 +249,9 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
 
   const windowFor = (y: number, m: number, d: number, [a, b]: [number, number]): CommuteWindow => {
     const cells: HourCell[] = [];
-    for (let min = a; min < b; min += 60) {
-      cells.push(cellAt(zonedToUtc(y, m, d, Math.floor(min / 60), 0, o.tz)));
-    }
+    // Every hour the window touches: 07:45–08:15 → hours 07 and 08.
+    for (let h = Math.floor(a / 60); h * 60 < b; h++)
+      cells.push(cellAt(zonedToUtc(y, m, d, h, 0, o.tz)));
     const rain = cells.reduce<Level>((acc, c) => worse(acc, c.rain), 0);
     const wind = cells.reduce<Level>((acc, c) => worse(acc, c.windLevel), 0);
     return { cells, rain, wind, level: worse(rain, wind), passed: cells.every((c) => c.passed) };
@@ -261,8 +266,8 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   ): MiddaySummary => {
     let peak = 0;
     let total = 0;
-    for (let min = a; min < b; min += 60) {
-      const p = byT.get(zonedToUtc(y, m, d, Math.floor(min / 60), 0, o.tz));
+    for (let h = Math.floor(a / 60); h * 60 < b; h++) {
+      const p = byT.get(zonedToUtc(y, m, d, h, 0, o.tz));
       if (!p) continue;
       peak = Math.max(peak, p.mm);
       total += p.mm;
@@ -276,8 +281,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   // Walk forward from today, keeping workdays until we have `days`. Today is skipped once its home window is over.
   const todayParts = localParts(now, o.tz);
   const days: CommuteDay[] = [];
-  let prevKey: string | null = null;
-  let prevDayStart = 0;
+  let prevIso: number | null = null;
   for (let i = 0; days.length < o.days && i < 21; i++) {
     const noon = zonedToUtc(todayParts.y, todayParts.m, todayParts.d + i, 12, 0, o.tz);
     const p = localParts(noon, o.tz);
@@ -311,11 +315,13 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const bits: string[] = [];
     if (toWork.level) bits.push(ph.toWork(words(toWork)));
     if (home.level) bits.push(ph.home(words(home)));
-    const reason = `${bits.length ? bits.join(ph.sep) : ph.dryCalm}${midday.flag ? ph.middayFlag : ""}`;
+    const unknown = [...toWork.cells, ...home.cells].some((c) => c.missing);
+    const reason = unknown
+      ? ph.noData
+      : `${bits.length ? bits.join(ph.sep) : ph.dryCalm}${midday.flag ? ph.middayFlag : ""}`;
 
-    // A new week starts when the previous shown day is not the previous calendar day and this is the first weekday.
-    const newWeek =
-      prevKey !== null && dayStart - prevDayStart > 24 * H && iso === Math.min(...o.workdays);
+    // Days are walked in order, so a weekday at or before the previous one means the week wrapped.
+    const newWeek = prevIso !== null && iso <= prevIso;
 
     days.push({
       key: p.key,
@@ -330,11 +336,11 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
       midday,
       home,
       grade,
+      unknown,
       light: gradeToLight(grade),
       reason,
     });
-    prevKey = p.key;
-    prevDayStart = dayStart;
+    prevIso = iso;
   }
 
   return { days, todayShown: days.length > 0 && days[0]!.isToday };

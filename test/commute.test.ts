@@ -197,6 +197,32 @@ test("missing forecast hours are flagged, not treated as dry", () => {
   expect(r.days[2].toWork.cells.every((c) => !c.missing)).toBe(true);
 });
 
+test("a day with missing commute hours is unknown, not graded A", () => {
+  const hours = series().filter((h) => h.t < at("2026-09-24T00:00"));
+  const r = planCommute(hours, at("2026-09-21T06:40"), OPTS);
+  expect(r.days.map((d) => d.unknown)).toEqual([false, false, false, true, true]);
+  expect(r.days[3].reason).toBe("no forecast yet");
+});
+
+test("off-the-hour window covers every hour it touches", () => {
+  const hours = series({ "2026-09-23T08": [9] });
+  const r = planCommute(hours, at("2026-09-23T06:00"), {
+    ...OPTS,
+    toWork: [7 * 60 + 45, 8 * 60 + 15],
+  });
+  expect(r.days[0].toWork.cells.map((c) => c.label)).toEqual(["07", "08"]);
+  expect(r.days[0].grade).toBe("F");
+});
+
+test("seven-day week: divider before Monday", () => {
+  const r = planCommute(series(), at("2026-09-25T06:00"), {
+    ...OPTS,
+    workdays: [1, 2, 3, 4, 5, 6, 7],
+  });
+  expect(r.days.map((d) => d.short)).toEqual(["Fri", "Sat", "Sun", "Mon", "Tue"]);
+  expect(r.days.map((d) => d.newWeek)).toEqual([false, false, false, true, false]);
+});
+
 test("custom workdays: a four-day week", () => {
   const r = planCommute(series(), at("2026-09-21T06:40"), {
     ...OPTS,

@@ -744,6 +744,12 @@ export const styles = css`
   .gbadge.l2 {
     background: var(--owc-red);
   }
+  /* no forecast for some commute hour: grade unknown */
+  .gbadge.unknown {
+    background: none;
+    border: 1px dashed var(--secondary-text-color);
+    color: var(--secondary-text-color);
+  }
   /* F: dark-red badge with light text so it reads apart from D/E */
   .gbadge.f,
   .pop .gb.f {

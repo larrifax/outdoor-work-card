@@ -173,6 +173,7 @@ export interface Strings {
   cSep: string;
   cDryCalm: string;
   cMiddayFlag: string;
+  cNoData: string;
   cToday: string;
   cTomorrow: string;
   /** Hero captions and verdicts, indexed by traffic light 0/1/2. */
@@ -383,6 +384,7 @@ const EN: Strings = {
   cSep: " · ",
   cDryCalm: "dry and calm both ways",
   cMiddayFlag: " · heavy rain midday — consider home office",
+  cNoData: "no forecast yet",
   cToday: "Today",
   cTomorrow: "Tomorrow",
   cCaption: ["Good day to ride", "Rideable, with a catch", "Home office day"],
@@ -636,6 +638,7 @@ const NB: Strings = {
   cSep: " · ",
   cDryCalm: "tørt og vindstille begge veier",
   cMiddayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
+  cNoData: "ingen prognose ennå",
   cToday: "I dag",
   cTomorrow: "I morgen",
   cCaption: ["Fin dag å sykle", "Syklbart, med en hake", "Hjemmekontordag"],

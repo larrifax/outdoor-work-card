@@ -144,7 +144,9 @@ export class OutdoorWorkCard extends LitElement {
   private _maybeLoad(force: boolean): void {
     const r = this._r;
     if (!r || !this.isConnected) return;
-    const key = `${r.lat},${r.lon},${r.model},${r.days}`;
+    // Commute mode walks up to three weeks of workdays, so it always fetches the full 16-day horizon.
+    const forecastDays = r.mode === "commute" ? 16 : Math.min(16, r.days + 4);
+    const key = `${r.lat},${r.lon},${r.model},${forecastDays}`;
     const stale = !this._weather || Date.now() - this._weather.fetchedAt > r.refreshMs;
     if (!force && !stale && key === this._lastKey) return;
     this._lastKey = key;
@@ -154,7 +156,7 @@ export class OutdoorWorkCard extends LitElement {
       lon: r.lon,
       model: r.model,
       pastDays: 3,
-      forecastDays: Math.min(16, r.days + 4),
+      forecastDays,
       maxAgeMs: force ? 0 : r.refreshMs,
     })
       .then((w) => {
@@ -386,6 +388,7 @@ export class OutdoorWorkCard extends LitElement {
         sep: t.cSep,
         dryCalm: t.cDryCalm,
         middayFlag: t.cMiddayFlag,
+        noData: t.cNoData,
       },
     });
     const first = res.days[0];
@@ -447,10 +450,15 @@ export class OutdoorWorkCard extends LitElement {
           ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : nothing}
         </div>
         <div
-          class=${classMap({ gbadge: true, [`l${d.light}`]: true, f: d.grade === "F" })}
+          class=${classMap({
+            gbadge: true,
+            [`l${d.light}`]: !d.unknown,
+            f: !d.unknown && d.grade === "F",
+            unknown: d.unknown,
+          })}
           title=${d.reason}
         >
-          ${d.grade}
+          ${d.unknown ? "?" : d.grade}
         </div>
         ${this._tiles(d.toWork, t)}
         <div class=${classMap({ mid: true, flag: d.midday.flag })} title=${d.reason}>
