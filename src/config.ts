@@ -48,6 +48,9 @@ export interface Resolved {
   workdays: number[];
 }
 
+/** Unknown or missing mode falls back to work. */
+export const parseMode = (m: unknown): Mode => (m === "carwash" || m === "commute" ? m : "work");
+
 /** minutes-after-midnight → "HH:MM" */
 export const fmt = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -61,7 +64,7 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
   const lang = pickLang(hass);
   const t = strings(lang);
   const names = dayNames(lang);
-  const mode: Mode = c.mode === "carwash" ? "carwash" : c.mode === "commute" ? "commute" : "work";
+  const mode = parseMode(c.mode);
   const lat = num(c.latitude, hass?.config?.latitude ?? 59.91, -90, 90);
   const lon = num(c.longitude, hass?.config?.longitude ?? 10.75, -180, 180);
   const tz = hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -110,18 +113,22 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     mode,
     title:
       c.title ??
-      (mode === "carwash"
-        ? t.defWashTitle
-        : mode === "commute"
-          ? t.defCommuteTitle
-          : t.defWorkTitle),
+      (
+        {
+          carwash: t.defWashTitle,
+          commute: t.defCommuteTitle,
+          work: t.defWorkTitle,
+        } satisfies Record<Mode, string>
+      )[mode],
     subtitle:
       c.subtitle ??
-      (mode === "carwash"
-        ? t.defWashSub
-        : mode === "commute"
-          ? t.defCommuteSub(fmt(toWork[0]), fmt(toWork[1]), fmt(home[0]), fmt(home[1]))
-          : t.defWorkSub),
+      (
+        {
+          carwash: t.defWashSub,
+          commute: t.defCommuteSub(fmt(toWork[0]), fmt(toWork[1]), fmt(home[0]), fmt(home[1])),
+          work: t.defWorkSub,
+        } satisfies Record<Mode, string>
+      )[mode],
     lat,
     lon,
     tz,

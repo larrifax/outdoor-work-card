@@ -42,7 +42,9 @@ const at = (iso: string) => Date.parse(iso + "+02:00");
 test("Monday morning: Mon–Fri of this week, no divider, today first", () => {
   const r = planCommute(series(), at("2026-09-21T06:40"), OPTS);
   expect(r.days.map((d) => d.short)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
-  expect(r.todayShown && r.days[0].full === "Today" && r.days[1].full === "Tomorrow").toBe(true);
+  expect(r.days[0].isToday && r.days[0].full === "Today" && r.days[1].full === "Tomorrow").toBe(
+    true,
+  );
   expect(r.days.every((d) => !d.newWeek)).toBe(true);
   expect(r.days.map((d) => d.grade)).toEqual(["A", "A", "A", "A", "A"]);
 });
@@ -52,7 +54,8 @@ test("Wednesday 13:30: rolling window skips the weekend and marks the new week",
   expect(r.days.map((d) => d.short)).toEqual(["Wed", "Thu", "Fri", "Mon", "Tue"]);
   expect(r.days.map((d) => d.newWeek)).toEqual([false, false, false, true, false]);
   expect(r.days.map((d) => d.far)).toEqual([false, false, false, true, true]);
-  expect(r.days[0].toWork.passed && !r.days[0].home.passed).toBe(true);
+  expect(r.days[0].toWork.cells.every((c) => c.passed)).toBe(true);
+  expect(r.days[0].home.cells.some((c) => c.passed)).toBe(false);
   expect(r.days[0].toWork.cells.map((c) => c.label)).toEqual(["07", "08"]);
   expect(r.days[0].home.cells.map((c) => c.label)).toEqual(["16", "17"]);
 });
@@ -60,7 +63,7 @@ test("Wednesday 13:30: rolling window skips the weekend and marks the new week",
 test("after the home window today drops off; Friday evening shows next week", () => {
   const r = planCommute(series(), at("2026-09-25T18:05"), OPTS);
   expect(r.days.map((d) => d.short)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
-  expect(r.todayShown).toBe(false);
+  expect(r.days[0].isToday).toBe(false);
   expect(r.days[0].full).toBe("Monday");
   expect(r.days[0].newWeek).toBe(false);
   const sat = planCommute(series(), at("2026-09-26T10:00"), OPTS);

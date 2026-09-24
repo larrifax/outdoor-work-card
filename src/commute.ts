@@ -10,7 +10,7 @@
  */
 import type { HourPoint } from "./types";
 import { localParts, zonedToUtc } from "./time";
-import { FAR_HOURS, type Names } from "./logic";
+import { FAR_HOURS, SHORT, FULL, type Names } from "./logic";
 
 const H = 3_600_000;
 
@@ -110,7 +110,6 @@ export interface CommuteWindow {
   rain: Level;
   wind: Level;
   level: Level;
-  passed: boolean;
 }
 
 export interface MiddaySummary {
@@ -149,12 +148,7 @@ export interface CommuteDay {
 
 export interface CommuteResult {
   days: CommuteDay[];
-  /** true when the first row is today */
-  todayShown: boolean;
 }
-
-const SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export interface Thresholds {
   rainFine: number;
@@ -254,7 +248,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
       cells.push(cellAt(zonedToUtc(y, m, d, h, 0, o.tz)));
     const rain = cells.reduce<Level>((acc, c) => worse(acc, c.rain), 0);
     const wind = cells.reduce<Level>((acc, c) => worse(acc, c.windLevel), 0);
-    return { cells, rain, wind, level: worse(rain, wind), passed: cells.every((c) => c.passed) };
+    return { cells, rain, wind, level: worse(rain, wind) };
   };
 
   const middayFor = (
@@ -343,5 +337,5 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     prevIso = iso;
   }
 
-  return { days, todayShown: days.length > 0 && days[0]!.isToday };
+  return { days };
 }

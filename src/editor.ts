@@ -5,9 +5,9 @@
  */
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { CardConfig, HassLike } from "./types";
+import type { CardConfig, HassLike, Mode } from "./types";
 import { pickLang, strings, dayNames, type EditorStrings, type Lang } from "./i18n";
-import { resolve } from "./config";
+import { resolve, parseMode } from "./config";
 import { matchPreset, PRESETS, type PresetId } from "./commute";
 
 type Schema = Array<Record<string, unknown>>;
@@ -269,16 +269,13 @@ export class OutdoorWorkCardEditor extends LitElement {
 
   private get _schema(): Schema {
     const e = this._t;
-    const mode =
-      this._config?.mode === "carwash"
-        ? "carwash"
-        : this._config?.mode === "commute"
-          ? "commute"
-          : "work";
-    return [
-      ...COMMON(e, mode === "commute"),
-      ...(mode === "carwash" ? WASH : mode === "commute" ? COMMUTE(e, this._lang) : WORK(e)),
-    ];
+    const mode = parseMode(this._config?.mode);
+    const byMode: Record<Mode, () => Schema> = {
+      carwash: () => WASH,
+      commute: () => COMMUTE(e, this._lang),
+      work: () => WORK(e),
+    };
+    return [...COMMON(e, mode === "commute"), ...byMode[mode]()];
   }
 
   private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
@@ -332,7 +329,7 @@ export class OutdoorWorkCardEditor extends LitElement {
       ...this._config,
       preset: this._preset(this._config),
     } as Record<string, unknown>;
-    const isWork = data["mode"] !== "carwash" && data["mode"] !== "commute";
+    const isWork = parseMode(data["mode"]) === "work";
     return html`
       <ha-form
         .hass=${this.hass}

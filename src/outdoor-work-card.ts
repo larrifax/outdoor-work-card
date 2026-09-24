@@ -3,8 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { styleMap } from "lit/directives/style-map.js";
 
-import type { CardConfig, HassLike, WeatherData } from "./types";
-import { resolve, type Resolved } from "./config";
+import type { CardConfig, HassLike, Mode, WeatherData } from "./types";
+import { resolve, parseMode, fmt, type Resolved } from "./config";
 import { getWeather } from "./weather";
 import {
   planWork,
@@ -62,6 +62,8 @@ export class OutdoorWorkCard extends LitElement {
   private _refreshTimer?: number;
   private _tickTimer?: number;
   private _lastKey = "";
+  /** planCommute is Intl-heavy and hass updates re-render often: recompute only when inputs change. */
+  private _commuteMemo?: { deps: unknown[]; res: CommuteResult };
 
   // ---- HA card API --------------------------------------------------------
 
@@ -81,7 +83,9 @@ export class OutdoorWorkCard extends LitElement {
   }
 
   public getCardSize(): number {
-    return this._config?.mode === "carwash" ? 7 : this._config?.mode === "commute" ? 9 : 8;
+    return ({ carwash: 7, commute: 9, work: 8 } satisfies Record<Mode, number>)[
+      parseMode(this._config?.mode)
+    ];
   }
 
   public getGridOptions() {
@@ -181,18 +185,30 @@ export class OutdoorWorkCard extends LitElement {
     void this._tick;
     const t = strings(r.lang);
     const hostStyle = { "--owc-accent": r.accent };
-    const badge =
-      r.mode === "carwash"
-        ? icons.car(22)
-        : r.mode === "commute"
-          ? icons.bike(22)
-          : icons.wrench(20);
-    const popHead =
-      r.mode === "carwash"
-        ? t.popHeadWash
-        : r.mode === "commute"
-          ? t.popHeadCommute
-          : t.popHeadWork;
+    const view = (
+      {
+        carwash: {
+          badge: () => icons.car(22),
+          popHead: t.popHeadWash,
+          body: () => this._renderWash(r, t),
+        },
+        commute: {
+          badge: () => icons.bike(22),
+          popHead: t.popHeadCommute,
+          body: () => this._renderCommute(r, t),
+        },
+        work: {
+          badge: () => icons.wrench(20),
+          popHead: t.popHeadWork,
+          body: () => this._renderWork(r, t),
+        },
+      } satisfies Record<
+        Mode,
+        { badge: () => unknown; popHead: string; body: () => TemplateResult }
+      >
+    )[r.mode];
+    const badge = view.badge();
+    const popHead = view.popHead;
 
     return html`
       <ha-card style=${styleMap(hostStyle)}>
@@ -240,11 +256,7 @@ export class OutdoorWorkCard extends LitElement {
                   ${icons.info(16)}
                   <div>${t.fetching(r.lat.toFixed(2), r.lon.toFixed(2))}</div>
                 </div>`
-              : r.mode === "carwash"
-                ? this._renderWash(r, t)
-                : r.mode === "commute"
-                  ? this._renderCommute(r, t)
-                  : this._renderWork(r, t)
+              : view.body()
         }
       </ha-card>
     `;
@@ -263,11 +275,11 @@ export class OutdoorWorkCard extends LitElement {
     if (r.mode === "carwash") {
       head = t.popHeadWash;
       rows = [
-        this._ruleRow(t.popWashFrom, mono(fmtMin(r.washStart))),
+        this._ruleRow(t.popWashFrom, mono(fmt(r.washStart))),
         this._ruleRow(t.popHarmlessDay, mono(t.popUpTo(r.okRain))),
         this._ruleRow(
           t.popHarmlessNight,
-          mono(t.popNightVal(r.nightMax, fmtMin(r.nightFrom), fmtMin(r.nightUntil))),
+          mono(t.popNightVal(r.nightMax, fmt(r.nightFrom), fmt(r.nightUntil))),
         ),
         this._ruleRow(t.popRoadsDry, mono(t.popHours(r.leadHours))),
       ];
@@ -275,13 +287,13 @@ export class OutdoorWorkCard extends LitElement {
       head = t.popHeadWork;
       const end =
         typeof r.windowEnd === "number"
-          ? fmtMin(r.windowEnd)
+          ? fmt(r.windowEnd)
           : r.windowEnd === "sunset"
             ? t.sunset
             : t.dusk;
       rows = [
-        this._ruleRow(t.popWeekdayWin, html`${mono(fmtMin(r.weekdayStart))} → ${mono(end)}`),
-        this._ruleRow(t.popWeekendWin, html`${mono(fmtMin(r.weekendStart))} → ${mono(end)}`),
+        this._ruleRow(t.popWeekdayWin, html`${mono(fmt(r.weekdayStart))} → ${mono(end)}`),
+        this._ruleRow(t.popWeekendWin, html`${mono(fmt(r.weekendStart))} → ${mono(end)}`),
         this._ruleRow(t.popIgnoreUnder, mono(t.popMinutes(r.minWindowMinutes))),
         this._ruleRow(t.popCountsRain, mono(t.popAboveRate(r.rainThreshold))),
         ...r.tasks.map((task) =>
@@ -346,12 +358,7 @@ export class OutdoorWorkCard extends LitElement {
         <span class="gb f">F</span><span>${t.popGradeF}</span>
       </div>
       <div class="note">
-        ${t.popCommuteNote(
-          fmtMin(r.toWork[0]),
-          fmtMin(r.toWork[1]),
-          fmtMin(r.home[0]),
-          fmtMin(r.home[1]),
-        )}
+        ${t.popCommuteNote(fmt(r.toWork[0]), fmt(r.toWork[1]), fmt(r.home[0]), fmt(r.home[1]))}
         ${t.popMidday} ${t.popWinter}
       </div>
       <div class="src">${t.popSrc(model)}</div>
@@ -361,6 +368,9 @@ export class OutdoorWorkCard extends LitElement {
   // ---- commute mode -------------------------------------------------------
 
   private _renderCommute(r: Resolved, t: Strings): TemplateResult {
+    const deps = [this._weather, this._config, this._tick, r.tz, r.lang];
+    const memo = this._commuteMemo;
+    if (memo && memo.deps.every((d, i) => d === deps[i])) return this._commuteView(r, t, memo.res);
     const res: CommuteResult = planCommute(this._weather!.hours, Date.now(), {
       tz: r.tz,
       toWork: r.toWork,
@@ -391,6 +401,11 @@ export class OutdoorWorkCard extends LitElement {
         noData: t.cNoData,
       },
     });
+    this._commuteMemo = { deps, res };
+    return this._commuteView(r, t, res);
+  }
+
+  private _commuteView(r: Resolved, t: Strings, res: CommuteResult): TemplateResult {
     const first = res.days[0];
     if (!first)
       return html`<div class="state">
@@ -416,12 +431,10 @@ export class OutdoorWorkCard extends LitElement {
       <div class="cgrid ccols">
         <span>${t.cColDay}</span><span class="c">${t.cColGrade}</span>
         <span class="c"
-          >${t.cColToWork(fmtMin(r.toWork[0]).slice(0, 2), fmtMin(r.toWork[1]).slice(0, 2))}</span
+          >${t.cColToWork(fmt(r.toWork[0]).slice(0, 2), fmt(r.toWork[1]).slice(0, 2))}</span
         >
         <span class="c dim">${t.cColMidday}</span>
-        <span class="c"
-          >${t.cColHome(fmtMin(r.home[0]).slice(0, 2), fmtMin(r.home[1]).slice(0, 2))}</span
-        >
+        <span class="c">${t.cColHome(fmt(r.home[0]).slice(0, 2), fmt(r.home[1]).slice(0, 2))}</span>
       </div>
       <div class="crows">
         ${res.days.map(
@@ -675,7 +688,7 @@ export class OutdoorWorkCard extends LitElement {
     const skip = !ok && !none; // banner + trade-off state
     const heroCls = ok ? "ok" : none ? "bad" : "rec";
 
-    const washStart = fmtMin(r.washStart);
+    const washStart = fmt(r.washStart);
     const waitDays = res.bestIdx; // 0 = tonight
     const gain = best.streak - today.streak; // may be <= 0 only through open-ended rounding
     const describe = (d: WashDay) => t.describe(d.full, d.peakNight, d.peak.toFixed(1));
@@ -845,10 +858,6 @@ export class OutdoorWorkCard extends LitElement {
       </div>
     </div>`;
   }
-}
-
-function fmtMin(m: number): string {
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
 window.customCards = window.customCards || [];
