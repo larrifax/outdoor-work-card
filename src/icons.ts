@@ -53,6 +53,16 @@ export const icons = {
   alert: (s = 16) =>
     wrap(svg`<path d="M12 3l10 18H2z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>`, s),
   arrow: (s = 16) => wrap(svg`<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>`, s),
+  bike: (s = 22) =>
+    wrap(
+      svg`<circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M5.5 17l3-8h6l4 8"/><path d="M8.5 9h-2"/><path d="M12 17l2.5-8"/><path d="M13 6h3"/>`,
+      s,
+    ),
+  wind: (s = 11) =>
+    wrap(
+      svg`<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h15a3 3 0 1 1-3 3"/><path d="M3 18h7"/>`,
+      s,
+    ),
 } satisfies Record<string, Icon>;
 
 /** Pick an icon for a task by name; falls back to a generic check. */

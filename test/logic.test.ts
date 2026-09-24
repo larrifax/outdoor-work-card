@@ -13,7 +13,7 @@ function series(rain: [string, number][], { pastDays = 3, days = 9 } = {}): Hour
   const start = Date.UTC(2026, 8, 16 - pastDays, 0, 0) - 2 * H; // local midnight Oslo = 22:00Z prev day
   const hours: HourPoint[] = [];
   for (let t = start; t < start + (pastDays + days) * 24 * H; t += H) {
-    hours.push({ t, mm: 0, past: t + H <= NOW });
+    hours.push({ t, mm: 0, wind: 0, past: t + H <= NOW });
   }
   for (const [iso, mm] of rain) {
     const t = Date.parse(iso + "+02:00");

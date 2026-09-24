@@ -14,6 +14,13 @@ import {
   type WorkDay,
   type WashDay,
 } from "./logic";
+import {
+  planCommute,
+  type CommuteResult,
+  type CommuteDay,
+  type CommuteWindow,
+  type HourCell,
+} from "./commute";
 import { hm, durLabel, hLabel, localParts } from "./time";
 import { icons, taskIcon } from "./icons";
 import { strings, type Strings, type Seg } from "./i18n";
@@ -71,7 +78,7 @@ export class OutdoorWorkCard extends LitElement {
   }
 
   public getCardSize(): number {
-    return this._config?.mode === "carwash" ? 7 : 8;
+    return this._config?.mode === "carwash" ? 7 : this._config?.mode === "commute" ? 9 : 8;
   }
 
   public getGridOptions() {
@@ -169,7 +176,18 @@ export class OutdoorWorkCard extends LitElement {
     void this._tick;
     const t = strings(r.lang);
     const hostStyle = { "--owc-accent": r.accent };
-    const badge = r.mode === "carwash" ? icons.car(22) : icons.wrench(20);
+    const badge =
+      r.mode === "carwash"
+        ? icons.car(22)
+        : r.mode === "commute"
+          ? icons.bike(22)
+          : icons.wrench(20);
+    const popHead =
+      r.mode === "carwash"
+        ? t.popHeadWash
+        : r.mode === "commute"
+          ? t.popHeadCommute
+          : t.popHeadWork;
 
     return html`
       <ha-card style=${styleMap(hostStyle)}>
@@ -190,7 +208,7 @@ export class OutdoorWorkCard extends LitElement {
             <button
               class="qbtn"
               type="button"
-              aria-label=${r.mode === "carwash" ? t.popHeadWash : t.popHeadWork}
+              aria-label=${popHead}
               aria-expanded=${this._infoOpen}
               aria-controls="owc-pop"
               @click=${this._toggleInfo}
@@ -199,12 +217,7 @@ export class OutdoorWorkCard extends LitElement {
             </button>
             ${
               this._infoOpen
-                ? html`<div
-                    id="owc-pop"
-                    class="pop"
-                    role="dialog"
-                    aria-label=${r.mode === "carwash" ? t.popHeadWash : t.popHeadWork}
-                  >
+                ? html`<div id="owc-pop" class="pop" role="dialog" aria-label=${popHead}>
                     ${this._renderRules(r, t)}
                   </div>`
                 : nothing
@@ -224,7 +237,9 @@ export class OutdoorWorkCard extends LitElement {
                 </div>`
               : r.mode === "carwash"
                 ? this._renderWash(r, t)
-                : this._renderWork(r, t)
+                : r.mode === "commute"
+                  ? this._renderCommute(r, t)
+                  : this._renderWork(r, t)
         }
       </ha-card>
     `;
@@ -235,6 +250,8 @@ export class OutdoorWorkCard extends LitElement {
   private _renderRules(r: Resolved, t: Strings): TemplateResult {
     const model = r.model === "metno_seamless" ? "MET Nordic 1 km" : r.model;
     const mono = (s: string) => html`<span class="mono">${s}</span>`;
+
+    if (r.mode === "commute") return this._renderCommuteRules(r, t, model);
 
     let head: string;
     let rows: TemplateResult[];
@@ -282,6 +299,190 @@ export class OutdoorWorkCard extends LitElement {
 
   private _ruleRow(label: string, value: TemplateResult): TemplateResult {
     return html`<span class="k">${label}</span><span class="v">${value}</span>`;
+  }
+
+  // ---- commute popover ----------------------------------------------------
+
+  private _renderCommuteRules(r: Resolved, t: Strings, model: string): TemplateResult {
+    return html`
+      <div class="h">${t.popCommuteTile}</div>
+      <div class="grid">
+        <span class="k"
+          ><span class="val" style="display:flex;align-items:center;gap:4px"
+            >${icons.drop(11)}<span class="mono">0.4</span></span
+          ></span
+        ><span class="v">${t.popRainUnit}</span>
+        <span class="k"
+          ><span style="display:flex;align-items:center;gap:4px"
+            >${icons.wind(12)}<span class="mono">9</span></span
+          ></span
+        ><span class="v">${t.popWindUnit}</span>
+      </div>
+      <div class="note">${t.popTileNote}</div>
+      <div class="h">${t.popScales}</div>
+      <div class="scale">
+        <span></span><span class="c0">${t.popFine}</span><span class="c1">${t.popTolerable}</span
+        ><span class="c2">${t.popBad}</span>
+        <span class="k">${icons.drop(11)}${t.popRainLabel}</span
+        ><span class="mono">≤ ${r.rainFine}</span><span class="mono">≤ ${r.rainOk}</span
+        ><span class="mono">&gt; ${r.rainOk}</span>
+        <span class="k">${icons.wind(12)}${t.popWindLabel}</span
+        ><span class="mono">≤ ${r.windFine}</span><span class="mono">≤ ${r.windOk}</span
+        ><span class="mono">&gt; ${r.windOk}</span>
+      </div>
+      <div class="h">${t.popDayGrade}</div>
+      <div class="grades">
+        <span class="gb" style="background:var(--owc-accent)">A</span><span>${t.popGradeA}</span>
+        <span class="gb" style="background:var(--owc-accent)">B</span><span>${t.popGradeB}</span>
+        <span class="gb" style="background:var(--owc-amber)">C</span><span>${t.popGradeC}</span>
+        <span class="gb" style="background:var(--owc-red)">D</span><span>${t.popGradeD}</span>
+        <span class="gb" style="background:var(--owc-red)">E</span><span>${t.popGradeE}</span>
+      </div>
+      <div class="note">
+        ${t.popCommuteNote(
+          fmtMin(r.toWork[0]),
+          fmtMin(r.toWork[1]),
+          fmtMin(r.home[0]),
+          fmtMin(r.home[1]),
+          fmtMin(r.midday[0]),
+          fmtMin(r.midday[1]),
+        )}
+      </div>
+      <div class="src">${t.popSrc(model)}</div>
+    `;
+  }
+
+  // ---- commute mode -------------------------------------------------------
+
+  private _renderCommute(r: Resolved, t: Strings): TemplateResult {
+    const res: CommuteResult = planCommute(this._weather!.hours, Date.now(), {
+      tz: r.tz,
+      toWork: r.toWork,
+      home: r.home,
+      midday: r.midday,
+      rainFine: r.rainFine,
+      rainOk: r.rainOk,
+      windFine: r.windFine,
+      windOk: r.windOk,
+      workdays: r.workdays,
+      days: 5,
+      names: { short: r.names.short, full: r.names.full },
+      today: t.cToday,
+      tomorrow: t.cTomorrow,
+      phrases: {
+        rain: t.cRain,
+        lightRain: t.cLightRain,
+        strongWind: t.cStrongWind,
+        breezy: t.cBreezy,
+        toWork: t.cToWork,
+        home: t.cHome,
+        and: t.cAnd,
+        sep: t.cSep,
+        dryCalm: t.cDryCalm,
+        rainMidday: t.cRainMidday,
+      },
+    });
+    const first = res.days[0];
+    if (!first)
+      return html`<div class="state">
+        ${icons.info(16)}
+        <div>${t.cNoDays}</div>
+      </div>`;
+    const L = first.light;
+    const caption = t.cCaption[L];
+    const verdict = t.cVerdict[L];
+    const why = first.reason.charAt(0).toUpperCase() + first.reason.slice(1);
+
+    return html`
+      <div class="chero l${L}">
+        <div class="gbadge l${L}">${first.grade}</div>
+        <div>
+          <div class="cap">${caption}</div>
+          <div class="t">${first.full} · ${verdict}</div>
+          <div class="d">${why}</div>
+        </div>
+      </div>
+
+      <div class="cgrid ccols">
+        <span>${t.cColDay}</span><span class="c">${t.cColGrade}</span>
+        <span class="c"
+          >${t.cColToWork(fmtMin(r.toWork[0]).slice(0, 2), fmtMin(r.toWork[1]).slice(0, 2))}</span
+        >
+        <span class="c dim">${t.cColMidday}</span>
+        <span class="c"
+          >${t.cColHome(fmtMin(r.home[0]).slice(0, 2), fmtMin(r.home[1]).slice(0, 2))}</span
+        >
+      </div>
+      <div class="crows">
+        ${res.days.map(
+          (d) => html`
+            ${
+              d.newWeek
+                ? html`<div class="wk">
+                    <div class="ln"></div>
+                    <span>${t.cNextWeek}</span>
+                    <div class="ln"></div>
+                  </div>`
+                : nothing
+            }
+            ${this._commuteRow(d, t)}
+          `,
+        )}
+      </div>
+    `;
+  }
+
+  private _commuteRow(d: CommuteDay, t: Strings): TemplateResult {
+    return html`
+      <div class=${classMap({ cgrid: true, crow: true, today: d.isToday, far: d.far })}>
+        <div class="cell l">
+          <span class="dn">${d.short}</span><span class="dd">${d.dom}</span>
+          ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : nothing}
+        </div>
+        <div class="gbadge l${d.light}" title=${d.reason}>${d.grade}</div>
+        ${this._tiles(d.toWork)}
+        <div class="mid">
+          <span class="val"
+            ><span class="ic${d.midday.rain}">${icons.drop(10)}</span
+            >${d.midday.mm.toFixed(1)}</span
+          >
+          <span class="val"
+            ><span class="ic${d.midday.windLevel}">${icons.wind(11)}</span
+            >${Math.round(d.midday.wind)}</span
+          >
+        </div>
+        ${this._tiles(d.home)}
+      </div>
+    `;
+  }
+
+  private _tiles(w: CommuteWindow): TemplateResult {
+    return html`
+      <div class="tiles">
+        ${w.cells.map(
+          (c: HourCell) => html`
+            <div
+              class=${classMap({ tile: true, [`l${c.level}`]: true, passed: c.passed, missing: c.missing })}
+            >
+              <span class="hh">${c.label}</span>
+              ${
+                c.missing
+                  ? html`<span class="val">—</span>`
+                  : html`
+                      <span class="val"
+                        ><span class="ic${c.rain}">${icons.drop(10)}</span>${c.mm.toFixed(1)}</span
+                      >
+                      <span class="val"
+                        ><span class="ic${c.gust}">${icons.wind(11)}</span
+                        >${Math.round(c.wind)}</span
+                      >
+                    `
+              }
+            </div>
+          `,
+        )}
+      </div>
+    `;
   }
 
   // ---- work mode ----------------------------------------------------------

@@ -19,6 +19,7 @@ const COMMON = (e: EditorStrings): Schema => [
         options: [
           { value: "work", label: e.modeWork },
           { value: "carwash", label: e.modeWash },
+          { value: "commute", label: e.modeCommute },
         ],
       },
     },
@@ -152,6 +153,75 @@ const WASH: Schema = [
   },
 ];
 
+const COMMUTE: Schema = [
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "to_work_start", selector: { time: {} } },
+      { name: "to_work_end", selector: { time: {} } },
+    ],
+  },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "home_start", selector: { time: {} } },
+      { name: "home_end", selector: { time: {} } },
+    ],
+  },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      {
+        name: "rain_fine",
+        selector: {
+          number: { min: 0, max: 5, step: 0.1, mode: "box", unit_of_measurement: "mm/h" },
+        },
+      },
+      {
+        name: "rain_ok",
+        selector: {
+          number: { min: 0, max: 10, step: 0.1, mode: "box", unit_of_measurement: "mm/h" },
+        },
+      },
+    ],
+  },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      {
+        name: "wind_fine",
+        selector: { number: { min: 0, max: 20, step: 1, mode: "box", unit_of_measurement: "m/s" } },
+      },
+      {
+        name: "wind_ok",
+        selector: { number: { min: 0, max: 30, step: 1, mode: "box", unit_of_measurement: "m/s" } },
+      },
+    ],
+  },
+  {
+    name: "workdays",
+    selector: {
+      select: {
+        multiple: true,
+        mode: "list",
+        options: [
+          { value: 1, label: "Monday" },
+          { value: 2, label: "Tuesday" },
+          { value: 3, label: "Wednesday" },
+          { value: 4, label: "Thursday" },
+          { value: 5, label: "Friday" },
+          { value: 6, label: "Saturday" },
+          { value: 7, label: "Sunday" },
+        ],
+      },
+    },
+  },
+];
+
 @customElement("outdoor-work-card-editor")
 export class OutdoorWorkCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HassLike;
@@ -180,8 +250,13 @@ export class OutdoorWorkCardEditor extends LitElement {
 
   private get _schema(): Schema {
     const e = this._t;
-    const mode = this._config?.mode === "carwash" ? "carwash" : "work";
-    return [...COMMON(e), ...(mode === "carwash" ? WASH : WORK(e))];
+    const mode =
+      this._config?.mode === "carwash"
+        ? "carwash"
+        : this._config?.mode === "commute"
+          ? "commute"
+          : "work";
+    return [...COMMON(e), ...(mode === "carwash" ? WASH : mode === "commute" ? COMMUTE : WORK(e))];
   }
 
   private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
@@ -214,7 +289,7 @@ export class OutdoorWorkCardEditor extends LitElement {
     if (!this.hass || !this._config) return nothing;
     const e = this._t;
     const data = { mode: "work", ...this._config } as Record<string, unknown>;
-    const isWork = data["mode"] !== "carwash";
+    const isWork = data["mode"] !== "carwash" && data["mode"] !== "commute";
     return html`
       <ha-form
         .hass=${this.hass}

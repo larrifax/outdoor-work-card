@@ -1,4 +1,4 @@
-export type Mode = "work" | "carwash";
+export type Mode = "work" | "carwash" | "commute";
 
 /** One activity in `work` mode. `before`/`after` are hours of dry ground required. */
 export interface TaskConfig {
@@ -52,6 +52,25 @@ export interface CardConfig {
   night_until?: string;
   /** Hours before wash time that must be rain-free so the roads are dry (default 2). */
   dry_roads_hours?: number;
+
+  // --- commute mode ----------------------------------------------------
+  /** "HH:MM" bounds of the ride to work (default 07:00–09:00). */
+  to_work_start?: string;
+  to_work_end?: string;
+  /** "HH:MM" bounds of the ride home (default 16:00–18:00). */
+  home_start?: string;
+  home_end?: string;
+  /** "HH:MM" bounds of the midday context window (default 09:00–15:00). */
+  midday_start?: string;
+  midday_end?: string;
+  /** Rain (mm/h) that is still "fine" / still "tolerable" for a cyclist (default 0.2 / 1.0). */
+  rain_fine?: number;
+  rain_ok?: number;
+  /** Wind (m/s) that is still "fine" / still "tolerable" (default 6 / 10). */
+  wind_fine?: number;
+  wind_ok?: number;
+  /** ISO weekdays to show, 1 = Monday … 7 = Sunday (default [1,2,3,4,5]). */
+  workdays?: number[];
 }
 
 export interface HourPoint {
@@ -59,6 +78,8 @@ export interface HourPoint {
   t: number;
   /** Precipitation in mm during this hour == mm/h. */
   mm: number;
+  /** Mean 10 m wind speed during this hour, m/s. */
+  wind: number;
   /** True when this hour is in the past (from the archive part of the response). */
   past: boolean;
 }

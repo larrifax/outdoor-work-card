@@ -88,6 +88,7 @@ export interface Strings {
   // --- info popover (design F) ---
   popHeadWash: string;
   popHeadWork: string;
+  popHeadCommute: string;
   popWashFrom: string;
   popHarmlessDay: string;
   popHarmlessNight: string;
@@ -157,11 +158,66 @@ export interface Strings {
   whenDaytime: string;
   washInfo: (kind: "clear" | "earlier" | "night" | "daytime", peak: string) => string;
   outDays: (streak: number, open: boolean) => string;
+
+  // --- commute mode ---
+  /** Fragments the reason line is built from (see CommutePhrases). */
+  cRain: string;
+  cLightRain: string;
+  cStrongWind: string;
+  cBreezy: string;
+  cToWork: (what: string) => string;
+  cHome: (what: string) => string;
+  cAnd: string;
+  cSep: string;
+  cDryCalm: string;
+  cRainMidday: string;
+  cToday: string;
+  cTomorrow: string;
+  /** Hero captions and verdicts, indexed by traffic light 0/1/2. */
+  cCaption: [string, string, string];
+  cVerdict: [string, string, string];
+  cNoDays: string;
+  cNextWeek: string;
+  cOutlook: string;
+  // column headers — cColToWork/cColHome take "HH"–"HH" strings
+  cColDay: string;
+  cColGrade: string;
+  cColToWork: (from: string, to: string) => string;
+  cColMidday: string;
+  cColHome: (from: string, to: string) => string;
+  // popover
+  popCommuteTile: string;
+  popRainUnit: string;
+  popWindUnit: string;
+  popTileNote: string;
+  popScales: string;
+  popFine: string;
+  popTolerable: string;
+  popBad: string;
+  popRainLabel: string;
+  popWindLabel: string;
+  popDayGrade: string;
+  popGradeA: string;
+  popGradeB: string;
+  popGradeC: string;
+  popGradeD: string;
+  popGradeE: string;
+  popCommuteNote: (
+    toA: string,
+    toB: string,
+    homeA: string,
+    homeB: string,
+    midA: string,
+    midB: string,
+  ) => string;
+
   // --- config defaults ---
   defWorkTitle: string;
   defWorkSub: string;
   defWashTitle: string;
   defWashSub: string;
+  defCommuteTitle: string;
+  defCommuteSub: (toA: string, toB: string, homeA: string, homeB: string) => string;
   taskMow: string;
   taskPaint: string;
 
@@ -172,6 +228,7 @@ export interface Strings {
 export interface EditorStrings {
   modeWork: string;
   modeWash: string;
+  modeCommute: string;
   modelMetno: string;
   modelBest: string;
   modelEcmwf: string;
@@ -218,6 +275,7 @@ const EN: Strings = {
 
   popHeadWash: "How evenings are judged",
   popHeadWork: "How days are judged",
+  popHeadCommute: "How this card decides",
   popWashFrom: "Wash from",
   popHarmlessDay: "Harmless by day",
   popHarmlessNight: "Harmless at night",
@@ -303,16 +361,60 @@ const EN: Strings = {
           : `Peak ${peak} mm/h during the day — heavy enough to dirty a clean car.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
+  cRain: "rain",
+  cLightRain: "light rain",
+  cStrongWind: "strong wind",
+  cBreezy: "breezy",
+  cToWork: (w) => `${w} to work`,
+  cHome: (w) => `${w} home`,
+  cAnd: " + ",
+  cSep: " · ",
+  cDryCalm: "dry and calm both ways",
+  cRainMidday: " · rain midday",
+  cToday: "Today",
+  cTomorrow: "Tomorrow",
+  cCaption: ["Good day to ride", "Rideable, with a catch", "Home office day"],
+  cVerdict: ["Bike", "Bike if you can bear it", "Take the home office"],
+  cNoDays: "No commute days in the forecast.",
+  cNextWeek: "Next week",
+  cOutlook: "outlook",
+  cColDay: "Day",
+  cColGrade: "Grade",
+  cColToWork: (a, b) => `To work ${a}–${b}`,
+  cColMidday: "Midday",
+  cColHome: (a, b) => `Home ${a}–${b}`,
+  popCommuteTile: "In each hour tile",
+  popRainUnit: "rain, mm/h",
+  popWindUnit: "wind, m/s",
+  popTileNote: "Each icon is coloured by its own scale; the tile takes the worse of the two.",
+  popScales: "Scales",
+  popFine: "fine",
+  popTolerable: "tolerable",
+  popBad: "bad",
+  popRainLabel: "rain",
+  popWindLabel: "wind",
+  popDayGrade: "Day grade",
+  popGradeA: "both commutes fine",
+  popGradeB: "both fine, heavy rain midday",
+  popGradeC: "a commute is only tolerable",
+  popGradeD: "one commute is bad",
+  popGradeE: "both commutes bad",
+  popCommuteNote: (toA, toB, homeA, homeB, midA, midB) =>
+    `A commute is judged by its worst hour and the grade covers the whole day. To work ${toA}–${toB} · home ${homeA}–${homeB} · midday ${midA}–${midB} shown for context only.`,
+
   defWorkTitle: "Outdoor Work",
   defWorkSub: "Dry-ground windows after work",
   defWashTitle: "Car Wash",
   defWashSub: "Which evening keeps it clean longest",
+  defCommuteTitle: "Bike to Work",
+  defCommuteSub: (toA, toB, homeA, homeB) => `Commute ${toA}–${toB} and ${homeA}–${homeB}`,
   taskMow: "Mow",
   taskPaint: "Paint",
 
   ed: {
     modeWork: "Outdoor work — dry-ground windows after work",
     modeWash: "Car wash — best evening for a lasting wash",
+    modeCommute: "Bike to work — grade each workday’s commutes",
     modelMetno: "MET Nordic 1 km (Norway, Sweden, Denmark, Finland) — recommended",
     modelBest: "Open-Meteo best match (anywhere)",
     modelEcmwf: "ECMWF IFS 0.25°",
@@ -340,6 +442,15 @@ const EN: Strings = {
       night_from: "Night starts",
       night_until: "Night ends",
       dry_roads_hours: "Roads must be dry for",
+      to_work_start: "Ride to work from",
+      to_work_end: "Ride to work until",
+      home_start: "Ride home from",
+      home_end: "Ride home until",
+      rain_fine: "Rain is fine up to",
+      rain_ok: "Rain is tolerable up to",
+      wind_fine: "Wind is fine up to",
+      wind_ok: "Wind is tolerable up to",
+      workdays: "Commute days",
     },
     helpers: {
       rain_threshold: 'Anything above this counts as rain for "dry before / dry after".',
@@ -350,6 +461,9 @@ const EN: Strings = {
       accent: "Leave blank for the mode default (green for work, blue for car wash).",
       dry_roads_hours:
         "No heavy rain this long before the wash, so you are not driving a clean car on wet roads.",
+      rain_ok: 'Above this an hour is "bad". Between fine and this it is "tolerable".',
+      wind_ok: 'Mean wind at 10 m. Above this an hour is "bad".',
+      workdays: "The card shows the next five of these, skipping the others.",
     },
     noteTasks1: "Activities default to ",
     noteTasks2: " (24 h dry before) and ",
@@ -392,6 +506,7 @@ const NB: Strings = {
 
   popHeadWash: "Slik vurderes kveldene",
   popHeadWork: "Slik vurderes dagene",
+  popHeadCommute: "Slik bestemmer kortet",
   popWashFrom: "Vask fra",
   popHarmlessDay: "Ufarlig på dagtid",
   popHarmlessNight: "Ufarlig om natten",
@@ -477,16 +592,60 @@ const NB: Strings = {
           : `Topp ${peak} mm/t på dagtid — kraftig nok til å skitne til en ren bil.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
+  cRain: "regn",
+  cLightRain: "lett regn",
+  cStrongWind: "sterk vind",
+  cBreezy: "vindfullt",
+  cToWork: (w) => `${w} til jobb`,
+  cHome: (w) => `${w} hjem`,
+  cAnd: " + ",
+  cSep: " · ",
+  cDryCalm: "tørt og vindstille begge veier",
+  cRainMidday: " · regn midt på dagen",
+  cToday: "I dag",
+  cTomorrow: "I morgen",
+  cCaption: ["Fin dag å sykle", "Syklbart, med en hake", "Hjemmekontordag"],
+  cVerdict: ["Sykle", "Sykle om du tåler det", "Ta hjemmekontor"],
+  cNoDays: "Ingen pendledager i varselet.",
+  cNextWeek: "Neste uke",
+  cOutlook: "utsikter",
+  cColDay: "Dag",
+  cColGrade: "Karakter",
+  cColToWork: (a, b) => `Til jobb ${a}–${b}`,
+  cColMidday: "Midt på dagen",
+  cColHome: (a, b) => `Hjem ${a}–${b}`,
+  popCommuteTile: "I hver timerute",
+  popRainUnit: "regn, mm/t",
+  popWindUnit: "vind, m/s",
+  popTileNote: "Hvert ikon fargelegges på sin egen skala; ruta tar den verste av de to.",
+  popScales: "Skalaer",
+  popFine: "fint",
+  popTolerable: "tålelig",
+  popBad: "dårlig",
+  popRainLabel: "regn",
+  popWindLabel: "vind",
+  popDayGrade: "Dagskarakter",
+  popGradeA: "begge turer fine",
+  popGradeB: "begge fine, kraftig regn midt på dagen",
+  popGradeC: "en tur er bare tålelig",
+  popGradeD: "en tur er dårlig",
+  popGradeE: "begge turer dårlige",
+  popCommuteNote: (toA, toB, homeA, homeB, midA, midB) =>
+    `En tur vurderes etter sin verste time, og karakteren gjelder hele dagen. Til jobb ${toA}–${toB} · hjem ${homeA}–${homeB} · midt på dagen ${midA}–${midB} vises bare som kontekst.`,
+
   defWorkTitle: "Utearbeid",
   defWorkSub: "Tørre vinduer etter jobb",
   defWashTitle: "Bilvask",
   defWashSub: "Hvilken kveld holder den lengst ren",
+  defCommuteTitle: "Sykle til jobb",
+  defCommuteSub: (toA, toB, homeA, homeB) => `Pendling ${toA}–${toB} og ${homeA}–${homeB}`,
   taskMow: "Klippe",
   taskPaint: "Male",
 
   ed: {
     modeWork: "Utearbeid — tørre vinduer etter jobb",
     modeWash: "Bilvask — beste kveld for en vask som varer",
+    modeCommute: "Sykle til jobb — gi hver arbeidsdags pendling en karakter",
     modelMetno: "MET Nordic 1 km (Norge, Sverige, Danmark, Finland) — anbefalt",
     modelBest: "Open-Meteo beste treff (hvor som helst)",
     modelEcmwf: "ECMWF IFS 0,25°",
@@ -514,6 +673,15 @@ const NB: Strings = {
       night_from: "Natt starter",
       night_until: "Natt slutter",
       dry_roads_hours: "Veiene må være tørre i",
+      to_work_start: "Sykler til jobb fra",
+      to_work_end: "Sykler til jobb til",
+      home_start: "Sykler hjem fra",
+      home_end: "Sykler hjem til",
+      rain_fine: "Regn er fint opptil",
+      rain_ok: "Regn er tålelig opptil",
+      wind_fine: "Vind er fin opptil",
+      wind_ok: "Vind er tålelig opptil",
+      workdays: "Pendledager",
     },
     helpers: {
       rain_threshold: 'Alt over dette teller som regn for "tørt før / tørt etter".',
@@ -524,6 +692,9 @@ const NB: Strings = {
       accent: "La stå tom for modusstandarden (grønn for arbeid, blå for bilvask).",
       dry_roads_hours:
         "Ikke kraftig regn så lenge før vasken, så du ikke kjører en ren bil på våte veier.",
+      rain_ok: 'Over dette er en time "dårlig". Mellom fint og dette er den "tålelig".',
+      wind_ok: 'Middelvind på 10 m. Over dette er en time "dårlig".',
+      workdays: "Kortet viser de neste fem av disse, og hopper over resten.",
     },
     noteTasks1: "Aktiviteter er som standard ",
     noteTasks2: " (24 t tørt før) og ",
