@@ -7,6 +7,8 @@ import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { CardConfig, HassLike } from "./types";
 import { pickLang, strings, type EditorStrings } from "./i18n";
+import { resolve } from "./config";
+import { matchPreset, PRESETS, type PresetId } from "./commute";
 
 type Schema = Array<Record<string, unknown>>;
 
@@ -153,7 +155,7 @@ const WASH: Schema = [
   },
 ];
 
-const COMMUTE: Schema = [
+const COMMUTE = (e: EditorStrings): Schema => [
   {
     type: "grid",
     name: "",
@@ -169,6 +171,20 @@ const COMMUTE: Schema = [
       { name: "home_start", selector: { time: {} } },
       { name: "home_end", selector: { time: {} } },
     ],
+  },
+  {
+    name: "preset",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "fair", label: e.presetFair },
+          { value: "everyday", label: e.presetEveryday },
+          { value: "all", label: e.presetAll },
+          { value: "custom", label: e.presetCustom },
+        ],
+      },
+    },
   },
   {
     type: "grid",
@@ -256,7 +272,10 @@ export class OutdoorWorkCardEditor extends LitElement {
         : this._config?.mode === "commute"
           ? "commute"
           : "work";
-    return [...COMMON(e), ...(mode === "carwash" ? WASH : mode === "commute" ? COMMUTE : WORK(e))];
+    return [
+      ...COMMON(e),
+      ...(mode === "carwash" ? WASH : mode === "commute" ? COMMUTE(e) : WORK(e)),
+    ];
   }
 
   private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
@@ -268,6 +287,19 @@ export class OutdoorWorkCardEditor extends LitElement {
     // Drop empty strings so defaults apply.
     for (const k of Object.keys(value)) {
       if (value[k] === "" || value[k] === null) delete value[k];
+    }
+    // Rider preset is editor-only: a newly picked preset writes its four thresholds;
+    // otherwise (threshold edit, or Custom) the value is ignored and recomputed on render.
+    const preset = value["preset"] as PresetId | "custom" | undefined;
+    delete value["preset"];
+    if (preset && preset !== "custom" && preset !== this._preset(this._config)) {
+      const p = PRESETS[preset];
+      Object.assign(value, {
+        rain_fine: p.rainFine,
+        rain_ok: p.rainOk,
+        wind_fine: p.windFine,
+        wind_ok: p.windOk,
+      });
     }
     const next = {
       ...this._config,
@@ -285,10 +317,19 @@ export class OutdoorWorkCardEditor extends LitElement {
     );
   }
 
+  /** Preset matching the effective (config or default) thresholds. */
+  private _preset(c: CardConfig | undefined) {
+    return matchPreset(resolve(c ?? { type: "" }, this.hass));
+  }
+
   protected override render(): TemplateResult | typeof nothing {
     if (!this.hass || !this._config) return nothing;
     const e = this._t;
-    const data = { mode: "work", ...this._config } as Record<string, unknown>;
+    const data = {
+      mode: "work",
+      ...this._config,
+      preset: this._preset(this._config),
+    } as Record<string, unknown>;
     const isWork = data["mode"] !== "carwash" && data["mode"] !== "commute";
     return html`
       <ha-form

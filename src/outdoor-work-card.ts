@@ -16,6 +16,9 @@ import {
 } from "./logic";
 import {
   planCommute,
+  DANGER_RAIN,
+  DANGER_WIND,
+  GUST_FACTOR,
   type CommuteResult,
   type CommuteDay,
   type CommuteWindow,
@@ -318,18 +321,19 @@ export class OutdoorWorkCard extends LitElement {
           ></span
         ><span class="v">${t.popWindUnit}</span>
       </div>
-      <div class="note">${t.popTileNote}</div>
+      <div class="note">${t.popTileNote} ${t.popEffWind(Math.round(GUST_FACTOR * 100))}</div>
       <div class="h">${t.popScales}</div>
       <div class="scale">
         <span></span><span class="c0">${t.popFine}</span><span class="c1">${t.popTolerable}</span
-        ><span class="c2">${t.popBad}</span>
+        ><span class="c2">${t.popBad}</span><span class="c3">${t.popDanger}</span>
         <span class="k">${icons.drop(11)}${t.popRainLabel}</span
         ><span class="mono">≤ ${r.rainFine}</span><span class="mono">≤ ${r.rainOk}</span
-        ><span class="mono">&gt; ${r.rainOk}</span>
+        ><span class="mono">&gt; ${r.rainOk}</span><span class="mono">&gt; ${DANGER_RAIN}</span>
         <span class="k">${icons.wind(12)}${t.popWindLabel}</span
         ><span class="mono">≤ ${r.windFine}</span><span class="mono">≤ ${r.windOk}</span
-        ><span class="mono">&gt; ${r.windOk}</span>
+        ><span class="mono">&gt; ${r.windOk}</span><span class="mono">&gt; ${DANGER_WIND}</span>
       </div>
+      <div class="note">${t.popDangerLine(DANGER_RAIN, DANGER_WIND)}</div>
       <div class="h">${t.popDayGrade}</div>
       <div class="grades">
         <span class="gb" style="background:var(--owc-accent)">A</span><span>${t.popGradeA}</span>
@@ -337,6 +341,7 @@ export class OutdoorWorkCard extends LitElement {
         <span class="gb" style="background:var(--owc-amber)">C</span><span>${t.popGradeC}</span>
         <span class="gb" style="background:var(--owc-red)">D</span><span>${t.popGradeD}</span>
         <span class="gb" style="background:var(--owc-red)">E</span><span>${t.popGradeE}</span>
+        <span class="gb f">F</span><span>${t.popGradeF}</span>
       </div>
       <div class="note">
         ${t.popCommuteNote(
@@ -344,9 +349,8 @@ export class OutdoorWorkCard extends LitElement {
           fmtMin(r.toWork[1]),
           fmtMin(r.home[0]),
           fmtMin(r.home[1]),
-          fmtMin(r.midday[0]),
-          fmtMin(r.midday[1]),
         )}
+        ${t.popMidday} ${t.popWinter}
       </div>
       <div class="src">${t.popSrc(model)}</div>
     `;
@@ -374,12 +378,14 @@ export class OutdoorWorkCard extends LitElement {
         lightRain: t.cLightRain,
         strongWind: t.cStrongWind,
         breezy: t.cBreezy,
+        cloudburst: t.cCloudburst,
+        dangerousGusts: t.cDangerousGusts,
         toWork: t.cToWork,
         home: t.cHome,
         and: t.cAnd,
         sep: t.cSep,
         dryCalm: t.cDryCalm,
-        rainMidday: t.cRainMidday,
+        middayFlag: t.cMiddayFlag,
       },
     });
     const first = res.days[0];
@@ -389,13 +395,14 @@ export class OutdoorWorkCard extends LitElement {
         <div>${t.cNoDays}</div>
       </div>`;
     const L = first.light;
-    const caption = t.cCaption[L];
-    const verdict = t.cVerdict[L];
+    const isF = first.grade === "F";
+    const caption = isF ? t.cCaptionF : t.cCaption[L];
+    const verdict = isF ? t.cVerdictF : t.cVerdict[L];
     const why = first.reason.charAt(0).toUpperCase() + first.reason.slice(1);
 
     return html`
-      <div class="chero l${L}">
-        <div class="gbadge l${L}">${first.grade}</div>
+      <div class=${classMap({ chero: true, [`l${L}`]: true, f: isF })}>
+        <div class=${classMap({ gbadge: true, [`l${L}`]: true, f: isF })}>${first.grade}</div>
         <div>
           <div class="cap">${caption}</div>
           <div class="t">${first.full} · ${verdict}</div>
@@ -439,32 +446,40 @@ export class OutdoorWorkCard extends LitElement {
           <span class="dn">${d.short}</span><span class="dd">${d.dom}</span>
           ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : nothing}
         </div>
-        <div class="gbadge l${d.light}" title=${d.reason}>${d.grade}</div>
-        ${this._tiles(d.toWork)}
-        <div class="mid">
+        <div
+          class=${classMap({ gbadge: true, [`l${d.light}`]: true, f: d.grade === "F" })}
+          title=${d.reason}
+        >
+          ${d.grade}
+        </div>
+        ${this._tiles(d.toWork, t)}
+        <div class=${classMap({ mid: true, flag: d.midday.flag })} title=${d.reason}>
           <span class="val"
             ><span class="ic${d.midday.rain}">${icons.drop(10)}</span
             >${d.midday.mm.toFixed(1)}</span
           >
-          <span class="val"
-            ><span class="ic${d.midday.windLevel}">${icons.wind(11)}</span
-            >${Math.round(d.midday.wind)}</span
-          >
+          <span class="val tot">Σ ${d.midday.total.toFixed(1)}</span>
         </div>
-        ${this._tiles(d.home)}
+        ${this._tiles(d.home, t)}
       </div>
     `;
   }
 
-  private _tiles(w: CommuteWindow): TemplateResult {
+  private _tiles(w: CommuteWindow, t: Strings): TemplateResult {
     return html`
       <div class="tiles">
         ${w.cells.map(
           (c: HourCell) => html`
             <div
               class=${classMap({ tile: true, [`l${c.level}`]: true, passed: c.passed, missing: c.missing })}
+              tabindex=${c.missing ? nothing : 0}
+              style=${styleMap({ "anchor-name": `--owc-h-${c.t}` })}
+              @pointerenter=${c.missing ? nothing : this._showTip}
+              @pointerleave=${c.missing ? nothing : this._hideTip}
+              @focus=${c.missing ? nothing : this._showTip}
+              @blur=${c.missing ? nothing : this._hideTip}
             >
-              <span class="hh">${c.label}</span>
+              <span class="hh">${c.level === 3 ? icons.alert(9) : nothing}${c.label}</span>
               ${
                 c.missing
                   ? html`<span class="val">—</span>`
@@ -473,8 +488,20 @@ export class OutdoorWorkCard extends LitElement {
                         ><span class="ic${c.rain}">${icons.drop(10)}</span>${c.mm.toFixed(1)}</span
                       >
                       <span class="val"
-                        ><span class="ic${c.gust}">${icons.wind(11)}</span
-                        >${Math.round(c.wind)}</span
+                        ><span class="ic${c.windLevel}">${icons.wind(11)}</span
+                        >${Math.round(c.eff)}</span
+                      >
+                      <span
+                        class="tip"
+                        popover="hint"
+                        style=${styleMap({ "position-anchor": `--owc-h-${c.t}` })}
+                        >${t.cTileHint(
+                          c.label,
+                          c.mm.toFixed(1),
+                          String(Math.round(c.eff)),
+                          String(Math.round(c.wind)),
+                          String(Math.round(c.gust)),
+                        )}</span
                       >
                     `
               }

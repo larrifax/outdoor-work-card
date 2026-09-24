@@ -165,17 +165,24 @@ export interface Strings {
   cLightRain: string;
   cStrongWind: string;
   cBreezy: string;
+  cCloudburst: string;
+  cDangerousGusts: string;
   cToWork: (what: string) => string;
   cHome: (what: string) => string;
   cAnd: string;
   cSep: string;
   cDryCalm: string;
-  cRainMidday: string;
+  cMiddayFlag: string;
   cToday: string;
   cTomorrow: string;
   /** Hero captions and verdicts, indexed by traffic light 0/1/2. */
   cCaption: [string, string, string];
   cVerdict: [string, string, string];
+  /** Grade F overrides the light-indexed caption/verdict. */
+  cCaptionF: string;
+  cVerdictF: string;
+  /** Tile hint: hour, rain, effective/mean/gust wind (pre-formatted). */
+  cTileHint: (hh: string, mm: string, eff: string, mean: string, gust: string) => string;
   cNoDays: string;
   cNextWeek: string;
   cOutlook: string;
@@ -202,14 +209,13 @@ export interface Strings {
   popGradeC: string;
   popGradeD: string;
   popGradeE: string;
-  popCommuteNote: (
-    toA: string,
-    toB: string,
-    homeA: string,
-    homeB: string,
-    midA: string,
-    midB: string,
-  ) => string;
+  popGradeF: string;
+  popDanger: string;
+  popDangerLine: (rain: number, wind: number) => string;
+  popEffWind: (pct: number) => string;
+  popWinter: string;
+  popMidday: string;
+  popCommuteNote: (toA: string, toB: string, homeA: string, homeB: string) => string;
 
   // --- config defaults ---
   defWorkTitle: string;
@@ -235,6 +241,10 @@ export interface EditorStrings {
   winDusk: string;
   winSunset: string;
   locationSource: string;
+  presetFair: string;
+  presetEveryday: string;
+  presetAll: string;
+  presetCustom: string;
   labels: Record<string, string>;
   helpers: Record<string, string>;
   noteTasks1: string;
@@ -365,16 +375,22 @@ const EN: Strings = {
   cLightRain: "light rain",
   cStrongWind: "strong wind",
   cBreezy: "breezy",
+  cCloudburst: "cloudburst",
+  cDangerousGusts: "dangerous gusts",
   cToWork: (w) => `${w} to work`,
   cHome: (w) => `${w} home`,
   cAnd: " + ",
   cSep: " · ",
   cDryCalm: "dry and calm both ways",
-  cRainMidday: " · rain midday",
+  cMiddayFlag: " · heavy rain midday — consider home office",
   cToday: "Today",
   cTomorrow: "Tomorrow",
   cCaption: ["Good day to ride", "Rideable, with a catch", "Home office day"],
   cVerdict: ["Bike", "Bike if you can bear it", "Take the home office"],
+  cCaptionF: "Dangerous to ride",
+  cVerdictF: "Don't bike",
+  cTileHint: (hh, mm, eff, mean, gust) =>
+    `${hh}:00 · ${mm} mm · wind ${eff} m/s (mean ${mean}, gusts ${gust})`,
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
   cOutlook: "outlook",
@@ -385,7 +401,7 @@ const EN: Strings = {
   cColHome: (a, b) => `Home ${a}–${b}`,
   popCommuteTile: "In each hour tile",
   popRainUnit: "rain, mm/h",
-  popWindUnit: "wind, m/s",
+  popWindUnit: "effective wind, m/s",
   popTileNote: "Each icon is coloured by its own scale; the tile takes the worse of the two.",
   popScales: "Scales",
   popFine: "fine",
@@ -395,12 +411,21 @@ const EN: Strings = {
   popWindLabel: "wind",
   popDayGrade: "Day grade",
   popGradeA: "both commutes fine",
-  popGradeB: "both fine, heavy rain midday",
-  popGradeC: "a commute is only tolerable",
-  popGradeD: "one commute is bad",
+  popGradeB: "one commute tolerable",
+  popGradeC: "both commutes tolerable",
+  popGradeD: "one commute bad",
   popGradeE: "both commutes bad",
-  popCommuteNote: (toA, toB, homeA, homeB, midA, midB) =>
-    `A commute is judged by its worst hour and the grade covers the whole day. To work ${toA}–${toB} · home ${homeA}–${homeB} · midday ${midA}–${midB} shown for context only.`,
+  popGradeF: "a commute hour is dangerous",
+  popDanger: "dangerous",
+  popDangerLine: (rain, wind) =>
+    `Dangerous: rain above ${rain} mm/h or effective wind above ${wind} m/s, whatever your thresholds.`,
+  popEffWind: (pct) =>
+    `Effective wind is the mean, or ${pct}% of the gust speed when gusts are unusually strong.`,
+  popWinter: "Snow and ice are not assessed yet.",
+  popMidday:
+    "Midday doesn't change the grade. A red outline means heavy midday rain — the forecast may be off by an hour or two.",
+  popCommuteNote: (toA, toB, homeA, homeB) =>
+    `A commute is judged by its worst hour and the grade covers the whole day. To work ${toA}–${toB} · home ${homeA}–${homeB}.`,
 
   defWorkTitle: "Outdoor Work",
   defWorkSub: "Dry-ground windows after work",
@@ -421,6 +446,10 @@ const EN: Strings = {
     winDusk: "Civil dusk",
     winSunset: "Sunset",
     locationSource: "Location & data source",
+    presetFair: "Fair-weather",
+    presetEveryday: "Everyday",
+    presetAll: "All-weather",
+    presetCustom: "Custom",
     labels: {
       mode: "Card mode",
       title: "Title",
@@ -450,6 +479,7 @@ const EN: Strings = {
       rain_ok: "Rain is tolerable up to",
       wind_fine: "Wind is fine up to",
       wind_ok: "Wind is tolerable up to",
+      preset: "Rider type",
       workdays: "Commute days",
     },
     helpers: {
@@ -462,7 +492,9 @@ const EN: Strings = {
       dry_roads_hours:
         "No heavy rain this long before the wash, so you are not driving a clean car on wet roads.",
       rain_ok: 'Above this an hour is "bad". Between fine and this it is "tolerable".',
-      wind_ok: 'Mean wind at 10 m. Above this an hour is "bad".',
+      wind_ok:
+        'Effective wind at 10 m (mean, or more with strong gusts). Above this an hour is "bad".',
+      preset: "Fills the rain and wind thresholds below",
       workdays: "The card shows the next five of these, skipping the others.",
     },
     noteTasks1: "Activities default to ",
@@ -596,16 +628,22 @@ const NB: Strings = {
   cLightRain: "lett regn",
   cStrongWind: "sterk vind",
   cBreezy: "vindfullt",
+  cCloudburst: "styrtregn",
+  cDangerousGusts: "farlige vindkast",
   cToWork: (w) => `${w} til jobb`,
   cHome: (w) => `${w} hjem`,
   cAnd: " + ",
   cSep: " · ",
   cDryCalm: "tørt og vindstille begge veier",
-  cRainMidday: " · regn midt på dagen",
+  cMiddayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
   cToday: "I dag",
   cTomorrow: "I morgen",
   cCaption: ["Fin dag å sykle", "Syklbart, med en hake", "Hjemmekontordag"],
   cVerdict: ["Sykle", "Sykle om du tåler det", "Ta hjemmekontor"],
+  cCaptionF: "Farlig å sykle",
+  cVerdictF: "Ikke sykle",
+  cTileHint: (hh, mm, eff, mean, gust) =>
+    `${hh}:00 · ${mm} mm · vind ${eff} m/s (middel ${mean}, kast ${gust})`,
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
   cOutlook: "utsikter",
@@ -616,7 +654,7 @@ const NB: Strings = {
   cColHome: (a, b) => `Hjem ${a}–${b}`,
   popCommuteTile: "I hver timerute",
   popRainUnit: "regn, mm/t",
-  popWindUnit: "vind, m/s",
+  popWindUnit: "effektiv vind, m/s",
   popTileNote: "Hvert ikon fargelegges på sin egen skala; ruta tar den verste av de to.",
   popScales: "Skalaer",
   popFine: "fint",
@@ -626,12 +664,21 @@ const NB: Strings = {
   popWindLabel: "vind",
   popDayGrade: "Dagskarakter",
   popGradeA: "begge turer fine",
-  popGradeB: "begge fine, kraftig regn midt på dagen",
-  popGradeC: "en tur er bare tålelig",
-  popGradeD: "en tur er dårlig",
+  popGradeB: "en tur tålelig",
+  popGradeC: "begge turer tålelige",
+  popGradeD: "en tur dårlig",
   popGradeE: "begge turer dårlige",
-  popCommuteNote: (toA, toB, homeA, homeB, midA, midB) =>
-    `En tur vurderes etter sin verste time, og karakteren gjelder hele dagen. Til jobb ${toA}–${toB} · hjem ${homeA}–${homeB} · midt på dagen ${midA}–${midB} vises bare som kontekst.`,
+  popGradeF: "en pendlertime er farlig",
+  popDanger: "farlig",
+  popDangerLine: (rain, wind) =>
+    `Farlig: regn over ${rain} mm/t eller effektiv vind over ${wind} m/s, uansett dine terskler.`,
+  popEffWind: (pct) =>
+    `Effektiv vind er middelvinden, eller ${pct} % av kastene når de er uvanlig kraftige.`,
+  popWinter: "Snø og is vurderes ikke ennå.",
+  popMidday:
+    "Midt på dagen endrer ikke karakteren. Rød kant betyr kraftig regn midt på dagen — varselet kan bomme med en time eller to.",
+  popCommuteNote: (toA, toB, homeA, homeB) =>
+    `En tur vurderes etter sin verste time, og karakteren gjelder hele dagen. Til jobb ${toA}–${toB} · hjem ${homeA}–${homeB}.`,
 
   defWorkTitle: "Utearbeid",
   defWorkSub: "Tørre vinduer etter jobb",
@@ -652,6 +699,10 @@ const NB: Strings = {
     winDusk: "Borgerlig skumring",
     winSunset: "Solnedgang",
     locationSource: "Sted og datakilde",
+    presetFair: "Finværssyklist",
+    presetEveryday: "Hverdagssyklist",
+    presetAll: "Allværssyklist",
+    presetCustom: "Egendefinert",
     labels: {
       mode: "Kortmodus",
       title: "Tittel",
@@ -681,6 +732,7 @@ const NB: Strings = {
       rain_ok: "Regn er tålelig opptil",
       wind_fine: "Vind er fin opptil",
       wind_ok: "Vind er tålelig opptil",
+      preset: "Syklisttype",
       workdays: "Pendledager",
     },
     helpers: {
@@ -693,7 +745,9 @@ const NB: Strings = {
       dry_roads_hours:
         "Ikke kraftig regn så lenge før vasken, så du ikke kjører en ren bil på våte veier.",
       rain_ok: 'Over dette er en time "dårlig". Mellom fint og dette er den "tålelig".',
-      wind_ok: 'Middelvind på 10 m. Over dette er en time "dårlig".',
+      wind_ok:
+        'Effektiv vind på 10 m (middel, eller mer ved kraftige kast). Over dette er en time "dårlig".',
+      preset: "Fyller ut regn- og vindtersklene under",
       workdays: "Kortet viser de neste fem av disse, og hopper over resten.",
     },
     noteTasks1: "Aktiviteter er som standard ",

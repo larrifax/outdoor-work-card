@@ -1,5 +1,6 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
 import { parseHM } from "./time";
+import { PRESETS } from "./commute";
 import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
 export function defaultTasks(t: ReturnType<typeof strings>): TaskConfig[] {
@@ -89,8 +90,9 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     Array.isArray(c.workdays) && c.workdays.length
       ? [...new Set(c.workdays.map((n) => Math.round(num(n, 1, 1, 7))))].sort()
       : [1, 2, 3, 4, 5];
-  const rainFine = num(c.rain_fine, 0.2, 0, 20);
-  const windFine = num(c.wind_fine, 6, 0, 40);
+  const def = PRESETS.everyday;
+  const rainFine = num(c.rain_fine, def.rainFine, 0, 20);
+  const windFine = num(c.wind_fine, def.windFine, 0, 40);
 
   const tasks =
     Array.isArray(c.tasks) && c.tasks.length
@@ -143,9 +145,9 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     home,
     midday,
     rainFine,
-    rainOk: Math.max(rainFine, num(c.rain_ok, 1.0, 0, 20)),
+    rainOk: Math.max(rainFine, num(c.rain_ok, def.rainOk, 0, 20)),
     windFine,
-    windOk: Math.max(windFine, num(c.wind_ok, 10, 0, 40)),
+    windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
     workdays,
   };
 }

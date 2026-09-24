@@ -2,7 +2,7 @@ import { test, expect, beforeAll, afterAll } from "vitest";
 import { page } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
-import { GOOD, RAINY, TONIGHT } from "./fixtures/example";
+import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
 
 // Minimal <ha-card> so the bundle renders outside Home Assistant.
 beforeAll(() => {
@@ -27,7 +27,13 @@ beforeAll(() => {
     const u = new URL(String(url));
     const lat = parseFloat(u.searchParams.get("latitude") ?? "0");
     const body =
-      Math.abs(lat - 59.92) < 0.001 ? RAINY : Math.abs(lat - 59.9) < 0.001 ? TONIGHT : GOOD;
+      Math.abs(lat - 59.93) < 0.001
+        ? COMMUTE
+        : Math.abs(lat - 59.92) < 0.001
+          ? RAINY
+          : Math.abs(lat - 59.9) < 0.001
+            ? TONIGHT
+            : GOOD;
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -60,6 +66,7 @@ const configs = [
     latitude: 59.92,
     title: "Car Wash (rainy week)",
   },
+  { type: "custom:outdoor-work-card", mode: "commute", latitude: 59.93 },
 ];
 
 // HA-ish theme vars per appearance (mirrors the old harness.html).
@@ -114,7 +121,7 @@ for (const theme of ["dark", "light"] as const) {
   test(`renders and screenshots all cards in ${theme} mode`, async () => {
     const host = await mountThemed(theme);
     const cards = host.querySelectorAll("outdoor-work-card");
-    expect(cards.length).toBe(5);
+    expect(cards.length).toBe(6);
     // Each card should have rendered its ha-card shell.
     for (const card of cards) {
       expect(card.shadowRoot?.querySelector("ha-card"), "ha-card mounted").toBeTruthy();
@@ -157,6 +164,19 @@ for (const theme of ["dark", "light"] as const) {
       skipRoot.querySelector(".hero.rec .tradeoff strong.gain"),
       "gain is bold + accent",
     ).toBeTruthy();
+
+    // Commute card (idx 5): F today, a flagged midday, effective-wind tiles.
+    const cRoot = cards[5]!.shadowRoot!;
+    expect([...cRoot.querySelectorAll(".crow .gbadge")].map((b) => b.textContent?.trim())).toEqual([
+      "F",
+      "B",
+      "D",
+      "C",
+      "A",
+    ]);
+    expect(cRoot.querySelector(".chero.f .cap")?.textContent?.trim()).toBe("Dangerous to ride");
+    expect(cRoot.querySelectorAll(".mid.flag").length).toBe(1);
+    expect(cRoot.querySelectorAll(".tile.l3").length).toBe(1);
 
     await page.screenshot({ element: host, path: `__screenshots__/cards-${theme}.png` });
   });
