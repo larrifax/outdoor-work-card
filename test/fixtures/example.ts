@@ -77,6 +77,9 @@ export const RAINY = build([
 // Commute scenario (keyed by latitude 59.93): Wed F (storm gusts home), Thu B
 // with a flagged wet midday, Fri D, Mon C, Tue A with gusts that lift the
 // effective wind above the mean without leaving "fine".
+// Winter bits (summer tyres by the automatic guess: no frost before today):
+// Mon snowy morning (snowflake + cm, still C), Tue icy morning after a wet
+// evening and a 0 °C night (badge, still A) and a snow-flagged midday.
 function commute() {
   const base = build([
     ["2026-09-17T08:00", 0.4],
@@ -85,9 +88,26 @@ function commute() {
     ["2026-09-17T13:00", 0.9],
     ["2026-09-18T07:00", 1.6],
     ["2026-09-18T08:00", 0.6],
-    ["2026-09-21T08:00", 0.5],
+    ["2026-09-21T08:00", 0.5 / 0.7],
     ["2026-09-21T16:00", 0.4],
+    ["2026-09-21T20:00", 0.3],
+    ["2026-09-22T12:00", 0.8 / 0.7],
   ]);
+  const idx = (iso: string) => base.hourly.time.indexOf(Date.parse(iso + "+02:00") / 1000);
+  const snowfall = base.hourly.time.map(() => 0);
+  const temperature_2m = base.hourly.time.map(() => 8);
+  const snow_depth = base.hourly.time.map(() => 0);
+  snowfall[idx("2026-09-21T08:00")] = 0.5;
+  snowfall[idx("2026-09-22T12:00")] = 0.8;
+  for (const [iso, c] of [
+    ["2026-09-21T07:00", 1],
+    ["2026-09-21T08:00", -1],
+    ["2026-09-22T03:00", 0],
+    ["2026-09-22T07:00", 3],
+    ["2026-09-22T08:00", 3],
+    ["2026-09-22T12:00", 0],
+  ] as const)
+    temperature_2m[idx(iso)] = c;
   const wind = base.hourly.time.map(() => 3);
   const gusts = base.hourly.time.map(() => 5);
   const set = (iso: string, w: number, g: number) => {
@@ -99,6 +119,15 @@ function commute() {
   set("2026-09-16T17:00", 12, 26);
   set("2026-09-22T07:00", 4, 9);
   set("2026-09-22T17:00", 5, 9.5);
-  return { hourly: { ...base.hourly, wind_speed_10m: wind, wind_gusts_10m: gusts } };
+  return {
+    hourly: {
+      ...base.hourly,
+      wind_speed_10m: wind,
+      wind_gusts_10m: gusts,
+      snowfall,
+      temperature_2m,
+      snow_depth,
+    },
+  };
 }
 export const COMMUTE = commute();

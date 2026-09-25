@@ -38,6 +38,11 @@ export const icons = {
     ),
   moon: (s = 20) => wrap(svg`<path d="M20 14.5A7 7 0 0 1 9.5 4 7 7 0 1 0 20 14.5Z"/>`, s),
   drop: (s = 18) => wrap(svg`<path d="M12 3S6 10 6 15a6 6 0 0 0 12 0C18 10 12 3 12 3Z"/>`, s),
+  snowflake: (s = 12) =>
+    wrap(
+      svg`<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9 4l3 2 3-2M9 20l3-2 3 2M4 10.5l3.5-.5L6 7M18 17l-1.5-3 3.5-.5M4 13.5l3.5.5L6 17M18 7l-1.5 3 3.5.5"/>`,
+      s,
+    ),
   rain: (s = 20) =>
     wrap(
       svg`<path d="M6 15a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.2A3.5 3.5 0 0 1 17 15Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>`,

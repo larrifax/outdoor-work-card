@@ -237,6 +237,10 @@ const COMMUTE = (e: EditorStrings, lang: Lang): Schema => [
       },
     ],
   },
+  {
+    name: "winter_tyres_entity",
+    selector: { entity: { domain: ["input_boolean", "switch", "binary_sensor"] } },
+  },
   { name: "workdays", selector: weekdays(lang) },
 ];
 

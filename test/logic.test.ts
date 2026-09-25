@@ -345,3 +345,65 @@ test("wash: next dirty stretch reports start, end, length and the rain that wet 
     total: 2.5,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Road salt
+// ---------------------------------------------------------------------------
+
+/** `series` plus frost hours (0 °C) and snowfall (cm); other hours have no temperature. */
+function salty(rain: [string, number][], frost: string[], snow: [string, number][] = []) {
+  const hours = series(rain);
+  const find = (iso: string) => hours.find((h) => h.t === at(iso + ":00"))!;
+  for (const iso of frost) find(iso).temp = 0;
+  for (const [iso, cm] of snow) find(iso).snow = cm;
+  return hours;
+}
+
+test("wash: after frost on wet roads, 0.15 mm the next day wets them; without frost it doesn't", () => {
+  const rain: [string, number][] = [
+    ["2026-09-17T05:00", 0.3],
+    ["2026-09-18T12:00", 0.15],
+  ];
+  const fri = planWash(salty(rain, ["2026-09-17T05"]), NOW, WASH).days[2];
+  expect(fri.clean).toBe(false);
+  expect(fri.wetFrom).toBe(at("2026-09-18T12:00"));
+  expect(fri.salted).toBe(true);
+  const plain = planWash(series(rain), NOW, WASH).days[2];
+  expect(plain.clean).toBe(true);
+  expect(plain.salted).toBe(false);
+});
+
+test("wash: heavy rain on salted roads isn't blamed on salt", () => {
+  const rain: [string, number][] = [
+    ["2026-09-17T05:00", 0.3],
+    ["2026-09-18T12:00", 2],
+  ];
+  const fri = planWash(salty(rain, ["2026-09-17T05"]), NOW, WASH).days[2];
+  expect(fri.clean).toBe(false);
+  expect(fri.salted).toBe(false);
+});
+
+test("wash: salt washes off after 10 mm of rain since the trigger", () => {
+  const rain = (last: number): [string, number][] => [
+    ["2026-09-17T05:00", 0.3],
+    ["2026-09-17T23:00", 6],
+    ["2026-09-18T00:00", last],
+    ["2026-09-20T12:00", 0.15],
+  ];
+  expect(planWash(salty(rain(4), ["2026-09-17T05"]), NOW, WASH).days[4].clean).toBe(true);
+  expect(planWash(salty(rain(3.5), ["2026-09-17T05"]), NOW, WASH).days[4].clean).toBe(false);
+});
+
+test("wash: frost on dry roads doesn't salt; frost with snowfall does", () => {
+  const later: [string, number][] = [["2026-09-18T12:00", 0.15]];
+  expect(planWash(salty(later, ["2026-09-17T05"]), NOW, WASH).days[2].clean).toBe(true);
+  const snowed = planWash(salty(later, ["2026-09-17T05"], [["2026-09-17T05", 0.05]]), NOW, WASH);
+  expect(snowed.days[2].clean).toBe(false);
+});
+
+test("wash: salted but dry roads while driving stay clean", () => {
+  // Night-time trigger; roads are dry again by 06:00 and no more moisture follows.
+  const r = planWash(salty([["2026-09-17T01:00", 0.3]], ["2026-09-17T01"]), NOW, WASH);
+  expect(r.days[1].clean).toBe(true);
+  expect(r.days[2].clean).toBe(true);
+});

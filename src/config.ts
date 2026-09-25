@@ -47,6 +47,8 @@ export interface Resolved {
   windFine: number;
   windOk: number;
   workdays: number[];
+  /** Winter-tyres entity id, "" when unset. */
+  winterTyresEntity: string;
 }
 
 /** Unknown or missing mode falls back to work. */
@@ -167,5 +169,7 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     windFine,
     windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
     workdays,
+    winterTyresEntity:
+      typeof c.winter_tyres_entity === "string" ? c.winter_tyres_entity.trim() : "",
   };
 }

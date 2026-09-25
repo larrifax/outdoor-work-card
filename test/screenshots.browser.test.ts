@@ -149,7 +149,7 @@ for (const theme of ["dark", "light"] as const) {
       washVals.some((v) => v?.includes("0.2 mm/h")),
       "ok_rain in popover",
     ).toBe(true);
-    expect(washPop.querySelector(".note")?.textContent).toContain("Road salt");
+    expect(washPop.querySelector(".note")?.textContent).toContain("salted");
 
     // Dry-by column: ✓ on good days, a waiting task on wet ones, "—" when never dry.
     const cells = (i: number) =>
@@ -183,8 +183,14 @@ for (const theme of ["dark", "light"] as const) {
       "A",
     ]);
     expect(cRoot.querySelector(".chero.f .cap")?.textContent?.trim()).toBe("Dangerous to ride");
-    expect(cRoot.querySelectorAll(".mid.flag").length).toBe(1);
+    // Thu wet midday + Tue snowy midday.
+    expect(cRoot.querySelectorAll(".mid.flag").length).toBe(2);
     expect(cRoot.querySelectorAll(".tile.l3").length).toBe(1);
+    // Winter: Mon 08 snowy tile (cm), icy badges on Mon 08 and Tue 07/08 without changing grades.
+    const tips = [...cRoot.querySelectorAll(".tile .tip")].map((v) => v.textContent ?? "");
+    expect(tips.some((x) => x.includes("0.5 cm snow"))).toBe(true);
+    expect(cRoot.querySelectorAll(".tile.icy").length).toBe(3);
+    expect(cRoot.querySelector(".tile.icy .tip")?.textContent).toContain("wet earlier");
 
     await page.screenshot({ element: host, path: `__screenshots__/cards-${theme}.png` });
   });
