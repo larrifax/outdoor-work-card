@@ -1,5 +1,12 @@
 import { test, expect } from "vitest";
-import { planCommute, matchPreset, PRESETS, type CommuteOptions } from "../src/commute";
+import {
+  planCommute,
+  matchPreset,
+  PRESETS,
+  summerTyres,
+  icyWatchFrom,
+  type CommuteOptions,
+} from "../src/commute";
 import { resolve } from "../src/config";
 import type { HourPoint } from "../src/types";
 
@@ -18,13 +25,26 @@ const OPTS: CommuteOptions = {
   days: 5,
 };
 
-/** Hourly series from Sat 19 Sep 2026 (Oslo midnight) for 14 days. `set` maps "YYYY-MM-DDTHH" → [mm, wind, gust]. */
-function series(set: Record<string, [number, number?, number?]> = {}): HourPoint[] {
+type Extra = { snow?: number; temp?: number | null; snowDepth?: number };
+type Set = Record<string, [number, number?, number?, Extra?]>;
+
+/** Hourly series from Sat 19 Sep 2026 (Oslo midnight) for 14 days. `set` maps "YYYY-MM-DDTHH" → [mm, wind, gust, {snow, temp, snowDepth}]. */
+function series(set: Set = {}): HourPoint[] {
   const start = Date.UTC(2026, 8, 18, 22, 0); // 2026-09-19 00:00 Oslo (UTC+2)
   const hours: HourPoint[] = [];
   for (let t = start; t < start + 14 * 24 * H; t += H)
-    hours.push({ t, mm: 0, wind: 3, gust: 5, et0: 0, past: false });
-  for (const [iso, [mm, wind, gust]] of Object.entries(set)) {
+    hours.push({
+      t,
+      mm: 0,
+      wind: 3,
+      gust: 5,
+      et0: 0,
+      past: false,
+      snow: 0,
+      temp: 10,
+      snowDepth: 0,
+    });
+  for (const [iso, [mm, wind, gust, extra]] of Object.entries(set)) {
     const t = Date.parse(iso + ":00+02:00");
     const h = hours.find((x) => x.t === t);
     expect(h, `hour ${iso} not in series`).toBeTruthy();
@@ -34,6 +54,7 @@ function series(set: Record<string, [number, number?, number?]> = {}): HourPoint
       h!.gust = wind / 0.6; // ordinary gust factor: effective wind == mean
     }
     if (gust !== undefined) h!.gust = gust;
+    Object.assign(h!, extra);
   }
   return hours;
 }
@@ -275,4 +296,135 @@ test("preset matcher: each preset maps to its id, any change to custom", () => {
 test("resolver defaults equal the Everyday preset", () => {
   const r = resolve({ type: "custom:outdoor-work-card", mode: "commute" }, undefined);
   expect(matchPreset(r)).toBe("everyday");
+});
+
+// ---------------------------------------------------------------------------
+// Winter: snowfall, slippery roads, tyre state
+// ---------------------------------------------------------------------------
+
+/** `cm` of snow as precipitation water (7 cm ≈ 10 mm). */
+const sn = (cm: number, extra: Extra = {}): [number, undefined, undefined, Extra] => [
+  cm / 0.7,
+  undefined,
+  undefined,
+  { snow: cm, temp: -2, ...extra },
+];
+
+test("snowfall is graded on its own cm/h scale, fixed across presets", () => {
+  const now = at("2026-09-21T06:40");
+  const tue = (set: Set, o = OPTS) => planCommute(series(set), now, o).days[1];
+  const light = tue({ "2026-09-22T07": sn(0.3) });
+  const c = light.toWork.cells[0];
+  expect(c.snow).toBe(0.3);
+  expect(c.snowLevel).toBe(1);
+  expect(c.snowDom).toBe(true);
+  expect(c.level).toBe(1);
+  expect(light.grade).toBe("B");
+  expect(light.reason).toBe("light snow to work");
+
+  const bad = tue({ "2026-09-22T07": sn(1) });
+  expect(bad.toWork.cells[0].level).toBe(2);
+  expect(bad.grade).toBe("D");
+  expect(bad.reason).toBe("snow to work");
+
+  const all = { ...OPTS, ...PRESETS.all };
+  const storm = tue({ "2026-09-22T17": sn(4) }, all);
+  expect(storm.home.cells[1].level).toBe(3);
+  expect(storm.grade).toBe("F");
+  expect(storm.reason).toBe("heavy snow home");
+  // 4 cm as rain water (5.7 mm) alone would only be bad on All-weather.
+  expect(tue({ "2026-09-22T17": [4 / 0.7] }, all).grade).toBe("D");
+});
+
+test("sleet: graded by the worse of rain and snow, dominance by the 50% rule", () => {
+  const now = at("2026-09-21T06:40");
+  const tue = (set: Set) => planCommute(series(set), now, OPTS).days[1];
+  // 1.0 mm, 0.2 cm snow ≈ 0.29 mm water → rain ≈ 0.71 mm (tolerable), snow tolerable.
+  const c = tue({ "2026-09-22T07": [1.0, undefined, undefined, { snow: 0.2, temp: 1 }] }).toWork
+    .cells[0];
+  expect(c.rain).toBe(1);
+  expect(c.snowLevel).toBe(1);
+  expect(c.level).toBe(1);
+  expect(c.snowDom).toBe(false);
+  // 1.0 mm with 0.4 cm snow ≈ 0.57 mm water → snow dominates; rain 0.43 tolerable, snow tolerable.
+  const d = tue({ "2026-09-22T07": [1.0, undefined, undefined, { snow: 0.4, temp: 0 }] }).toWork
+    .cells[0];
+  expect(d.snowDom).toBe(true);
+  // Heavy rain part wins over light snow: 3 mm incl. 0.2 cm snow → rain ≈ 2.7 mm bad.
+  const e = tue({ "2026-09-22T07": [3.0, undefined, undefined, { snow: 0.2, temp: 1 }] });
+  expect(e.toWork.cells[0].level).toBe(2);
+  expect(e.reason).toBe("rain to work");
+});
+
+test("icy roads: wet evening, cold night, still-cool morning — marker only, grade unchanged", () => {
+  const now = at("2026-09-21T06:40");
+  const watch = { ...OPTS, icyWatch: true };
+  const night = (morning: number, low = 0): Set => ({
+    "2026-09-21T20": [0.5],
+    "2026-09-22T03": [0, undefined, undefined, { temp: low }],
+    "2026-09-22T08": [0, undefined, undefined, { temp: morning }],
+  });
+  const tue = (set: Set, o: CommuteOptions = watch) => planCommute(series(set), now, o).days[1];
+
+  const icy = tue(night(4));
+  const c8 = icy.toWork.cells[1];
+  expect(c8.icy).toBe(true);
+  expect(c8.temp).toBe(4);
+  expect(icy.toWork.cells[0].icy).toBe(false); // 07: +10 °C
+  expect(icy.toWork.icy).toBe(true);
+  expect(icy.home.icy).toBe(false);
+  expect(c8.level).toBe(0);
+  expect(icy.grade).toBe("A");
+  expect(icy.reason).toBe("icy roads possible to work");
+
+  expect(tue(night(5)).toWork.icy).toBe(false); // thawed
+  expect(tue(night(4, 3)).toWork.icy).toBe(false); // night not cold enough
+  expect(
+    tue({
+      "2026-09-22T03": [0, undefined, undefined, { temp: 0 }],
+      "2026-09-22T08": [0, undefined, undefined, { temp: 1 }],
+    }).toWork.icy,
+  ).toBe(false); // dry road
+  expect(tue(night(4), OPTS).toWork.icy).toBe(false); // icyWatch off
+  // Snowfall in the hour itself wets the road.
+  const snowy = tue({ "2026-09-22T08": sn(0.3, { temp: -1 }) });
+  expect(snowy.toWork.cells[1].icy).toBe(true);
+  expect(snowy.reason).toBe("light snow + icy roads possible to work");
+});
+
+test("midday snow above 0.5 cm/h flags an A–C day, never a D/E/F one", () => {
+  const now = at("2026-09-21T06:40");
+  const tue = (set: Set) => planCommute(series(set), now, OPTS).days[1];
+  const m = tue({ "2026-09-22T11": sn(0.6), "2026-09-22T12": sn(0.2) });
+  expect(m.midday.snow).toBe(0.6);
+  expect(m.midday.snowTotal).toBeCloseTo(0.8);
+  expect(m.midday.snowDom).toBe(true);
+  expect(m.midday.flag).toBe(true);
+  expect(m.grade).toBe("A");
+  expect(tue({ "2026-09-22T11": sn(0.5) }).midday.flag).toBe(false);
+  const bad = tue({ "2026-09-22T07": sn(1), "2026-09-22T11": sn(0.6) });
+  expect(bad.grade).toBe("D");
+  expect(bad.midday.flag).toBe(false);
+});
+
+test("tyre guess: frost before yesterday or snow on the ground means winter tyres", () => {
+  const now = at("2026-09-25T07:00"); // yesterday starts Thu 24 00:00
+  const frost = (iso: string) => series({ [iso]: [0, undefined, undefined, { temp: -1 }] });
+  expect(summerTyres(series(), now, TZ)).toBe(true);
+  expect(summerTyres(frost("2026-09-22T03"), now, TZ)).toBe(false); // 3 days ago
+  expect(summerTyres(frost("2026-09-24T03"), now, TZ)).toBe(true); // last night only
+  expect(summerTyres(frost("2026-09-25T03"), now, TZ)).toBe(true);
+  expect(summerTyres(frost("2026-09-19T03"), now, TZ)).toBe(false); // first day of the window
+  expect(summerTyres(frost("2026-09-19T03"), at("2026-09-26T07:00"), TZ)).toBe(true); // aged out
+  const snowOnGround = series({ "2026-09-25T07": [0, undefined, undefined, { snowDepth: 0.05 }] });
+  expect(summerTyres(snowOnGround, now, TZ)).toBe(false);
+});
+
+test("tyre entity: on = winter, off = summer, anything else falls back to the guess", () => {
+  expect(icyWatchFrom("on", true)).toBe(false);
+  expect(icyWatchFrom("off", false)).toBe(true);
+  for (const s of [undefined, "unavailable", "unknown"]) {
+    expect(icyWatchFrom(s, true)).toBe(true);
+    expect(icyWatchFrom(s, false)).toBe(false);
+  }
 });

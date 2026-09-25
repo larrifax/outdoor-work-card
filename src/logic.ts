@@ -256,9 +256,18 @@ export function dryByCell(d: WorkDay, tasks: TaskConfig[]): DryByCell {
 // Wet-roads model: a garaged car gets dirty from spray while driving on wet
 // roads, not from rain on the parked car. An hour above `okRain` wets the
 // roads; they dry after `dryRoadsHours` rain-free hours (half speed at night).
+// After frost on wet roads (or with snowfall) the roads count as salted until
+// ~10 mm has washed them, and any measurable moisture wets them meanwhile.
 
 /** ponytail: fixed night drying factor. Ceiling: ignores temperature/wind; upgrade to an ET0- or temperature-aware rate if users ask. */
 const NIGHT_DRYING = 0.5;
+// ponytail: fixed road-salt constants. Ceiling: salt inferred from frost, no gritting data; make configurable if users ask.
+/** An hour at or below this (°C) on wet roads or with snowfall salts the roads… */
+const SALT_TEMP = 1;
+/** …until this much precipitation (mm) has fallen since… */
+const SALT_WASH_OFF = 10;
+/** …and while salted, anything above this (mm in an hour) wets them. */
+const SALT_WET = 0.1;
 
 export interface WashOptions {
   tz: string;
@@ -309,6 +318,8 @@ export interface WashDay extends DayBase {
   nextRain: DirtyStretch | null;
   /** First driving hour on wet roads this day (UTC ms), null if none. */
   wetFrom: number | null;
+  /** Roads were salted at `wetFrom`, so any moisture wet them. */
+  salted: boolean;
   /** When the roads dry after the day's last wet hour (UTC ms), null if never wet or never dry in data. */
   dryAt: number | null;
   icon: WashIcon;
@@ -334,7 +345,14 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   // Per-hour road state; the hour before the data starts counts as dry.
   const wet: boolean[] = [];
   const driving: boolean[] = [];
+  /** the hour's precipitation wet the roads (threshold depends on salt) */
+  const rainy: boolean[] = [];
+  /** roads counted as salted while judging this hour */
+  const salted: boolean[] = [];
   let drying = 0;
+  // ponytail: salt triggered before the fetched past days (7) is missed; accept, or fetch more history.
+  let salt = false;
+  let washOff = 0;
   for (const h of hours) {
     const p = localParts(h.t, o.tz);
     const m = p.h * 60 + p.mi;
@@ -343,12 +361,22 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     const parked =
       o.parked !== null && o.workdays.includes(iso) && inRange(m, o.parked[0], o.parked[1]);
     driving.push(!night && !parked);
-    if (h.mm > o.okRain) {
+    if (salt) {
+      washOff += h.mm;
+      if (washOff >= SALT_WASH_OFF) salt = false;
+    }
+    salted.push(salt);
+    rainy.push(h.mm > (salt ? SALT_WET : o.okRain));
+    if (rainy[rainy.length - 1]) {
       drying = o.dryRoadsHours;
       wet.push(true);
     } else {
       if (drying > 0) drying -= night ? NIGHT_DRYING : 1;
       wet.push(drying > 0);
+    }
+    if (h.temp != null && h.temp <= SALT_TEMP && (wet[wet.length - 1] || (h.snow ?? 0) > 0)) {
+      salt = true;
+      washOff = 0;
     }
   }
   const dirtyAt = (i: number) => wet[i]! && driving[i]!;
@@ -360,6 +388,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     hasData: boolean;
     evening: number;
     wetFrom: number | null;
+    salted: boolean;
     dryAt: number | null;
   };
   const info: Info[] = base.map((b) => {
@@ -372,6 +401,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     let peak = 0;
     let hasData = false;
     let wetFrom: number | null = null;
+    let saltedWet = false;
     let lastWet = -1;
     hours.forEach((h, i) => {
       if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
@@ -380,7 +410,10 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       if (wet[i]) lastWet = i;
       if (!dirtyAt(i)) return;
       clean = false;
-      wetFrom ??= h.t;
+      if (wetFrom === null) {
+        wetFrom = h.t;
+        saltedWet = salted[i]!;
+      }
       if (h.t + H > evening) eveningClean = false;
     });
     let dryAt: number | null = null;
@@ -389,7 +422,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       dryAt = j >= 0 ? hours[j]!.t : null;
     }
     if (!hasData) clean = eveningClean = false;
-    return { clean, eveningClean, peak, hasData, evening, wetFrom, dryAt };
+    return { clean, eveningClean, peak, hasData, evening, wetFrom, salted: saltedWet, dryAt };
   });
 
   const streakFrom = (s: number): { n: number; open: boolean } => {
@@ -418,8 +451,8 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     let peak = 0;
     let total = 0;
     for (let i = from; i <= end; i++) {
+      if (!rainy[i]) continue;
       const mm = hours[i]!.mm;
-      if (mm <= o.okRain) continue;
       peak = Math.max(peak, mm);
       total += mm;
     }
@@ -439,6 +472,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       openEnded: st.open,
       nextRain: nextDirtyFrom(i),
       wetFrom: inf.wetFrom,
+      salted: inf.salted,
       dryAt: inf.dryAt,
       icon,
     };

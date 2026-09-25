@@ -5,6 +5,7 @@ export const styles = css`
     --owc-amber: #f5b942;
     --owc-red: #ef6b6b;
     --owc-danger: #c81e1e;
+    --owc-ice: #4f9fe8;
     --owc-text: var(--primary-text-color, #e8eaed);
     --owc-text-2: var(--secondary-text-color, #9aa2ad);
     --owc-line: color-mix(in srgb, var(--owc-text) 9%, transparent);
@@ -880,6 +881,7 @@ export const styles = css`
     gap: 3px;
     padding: 5px 3px 6px;
     border-radius: 7px;
+    position: relative;
   }
   .tile.l0 {
     background: color-mix(in srgb, var(--owc-accent) 7%, transparent);
@@ -900,6 +902,14 @@ export const styles = css`
   }
   .tile:not(.missing) {
     cursor: help;
+  }
+  /* Slippery-roads badge: informational only, tile colour unchanged. */
+  .tile .icy {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    display: inline-flex;
+    color: var(--owc-ice);
   }
   .tile .hh {
     display: flex;

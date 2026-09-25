@@ -169,8 +169,8 @@ export interface Strings {
   whenClear: string;
   whenDry: string;
   whenWet: string;
-  /** Day hint; `time` = first wet driving hour (wetWhileDriving only). */
-  washInfo: (kind: WashKind, time: string) => string;
+  /** Day hint; `time` = first wet driving hour (wetWhileDriving only), `salted` = roads were salted then. */
+  washInfo: (kind: WashKind, time: string, salted?: boolean) => string;
   outDays: (streak: number, open: boolean) => string;
 
   // --- commute mode ---
@@ -181,6 +181,10 @@ export interface Strings {
   cBreezy: string;
   cCloudburst: string;
   cDangerousGusts: string;
+  cLightSnow: string;
+  cSnow: string;
+  cHeavySnow: string;
+  cIcy: string;
   cToWork: (what: string) => string;
   cHome: (what: string) => string;
   cAnd: string;
@@ -198,6 +202,10 @@ export interface Strings {
   cVerdictF: string;
   /** Tile hint: hour, rain, effective/mean/gust wind (pre-formatted). */
   cTileHint: (hh: string, mm: string, eff: string, mean: string, gust: string) => string;
+  /** Tile hint for a snow-dominated hour: snowfall in cm. */
+  cTileHintSnow: (hh: string, cm: string, eff: string, mean: string, gust: string) => string;
+  /** Second hint line: temperature, plus the icy suffix. */
+  cHintTemp: (temp: string, icy: boolean) => string;
   cNoDays: string;
   cNextWeek: string;
   cOutlook: string;
@@ -228,7 +236,12 @@ export interface Strings {
   popDanger: string;
   popDangerLine: (rain: number, wind: number) => string;
   popEffWind: (pct: number) => string;
-  popWinter: string;
+  popSnowUnit: string;
+  popSnowLabel: string;
+  popSnowLine: (ok: number, danger: number) => string;
+  popIcyLine: (night: number, now: number) => string;
+  popTyresAuto: string;
+  popTyresEntity: (entity: string, winter: boolean | null) => string;
   popMidday: string;
   popCommuteNote: (toA: string, toB: string, homeA: string, homeB: string) => string;
 
@@ -311,7 +324,8 @@ const EN: Strings = {
   popDryAgain: "Dry again after",
   popNightDry: "Night (no driving, half-speed drying)",
   popParked: "Parked indoors",
-  popNoSalt: "Road salt is not assessed.",
+  popNoSalt:
+    "After frost, roads count as salted until ~10 mm of rain has washed them — then any moisture counts as wet.",
   popWetVal: (mm) => `${mm} mm/h`,
   popSpan: (from, until) => `${from}–${until}`,
   popParkedVal: (from, until, days) => `${from}–${until} on ${days}`,
@@ -384,12 +398,14 @@ const EN: Strings = {
   whenClear: "clear",
   whenDry: "dries off",
   whenWet: "wet roads",
-  washInfo: (kind, time) =>
+  washInfo: (kind, time, salted) =>
     kind === "clear"
       ? "No rain forecast — roads stay dry."
       : kind === "dryBeforeDrive"
         ? "Rain, but roads are dry again before you drive."
-        : `Roads wet while you drive from ${time}.`,
+        : salted
+          ? `Salted roads wet while you drive from ${time}.`
+          : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
   cRain: "rain",
@@ -398,6 +414,10 @@ const EN: Strings = {
   cBreezy: "breezy",
   cCloudburst: "cloudburst",
   cDangerousGusts: "dangerous gusts",
+  cLightSnow: "light snow",
+  cSnow: "snow",
+  cHeavySnow: "heavy snow",
+  cIcy: "icy roads possible",
   cToWork: (w) => `${w} to work`,
   cHome: (w) => `${w} home`,
   cAnd: " + ",
@@ -413,6 +433,9 @@ const EN: Strings = {
   cVerdictF: "Don't bike",
   cTileHint: (hh, mm, eff, mean, gust) =>
     `${hh}:00 · ${mm} mm · wind ${eff} m/s (mean ${mean}, gusts ${gust})`,
+  cTileHintSnow: (hh, cm, eff, mean, gust) =>
+    `${hh}:00 · ${cm} cm snow · wind ${eff} m/s (mean ${mean}, gusts ${gust})`,
+  cHintTemp: (temp, icy) => `${temp} °C${icy ? ", wet earlier" : ""}`,
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
   cOutlook: "outlook",
@@ -443,7 +466,16 @@ const EN: Strings = {
     `Dangerous: rain above ${rain} mm/h or effective wind above ${wind} m/s, whatever your thresholds.`,
   popEffWind: (pct) =>
     `Effective wind is the mean, or ${pct}% of the gust speed when gusts are unusually strong.`,
-  popWinter: "Snow and ice are not assessed yet.",
+  popSnowUnit: "snowfall, cm/h (when snow dominates)",
+  popSnowLabel: "snow",
+  popSnowLine: (ok, danger) =>
+    `Snow, cm/h: fine none · tolerable ≤ ${ok} · bad > ${ok} · dangerous > ${danger}`,
+  popIcyLine: (night, now) =>
+    `Snowflake badge: road may be icy on summer tyres (wet road, night ≤ +${night} °C, now ≤ +${now} °C). Doesn't change the grade.`,
+  popTyresAuto:
+    "Summer tyres assumed: no frost in the days before yesterday and no snow on the ground",
+  popTyresEntity: (entity, winter) =>
+    `Tyres from ${entity}: ${winter === null ? "unavailable, guessing from weather" : winter ? "winter" : "summer"}`,
   popMidday:
     "Midday doesn't change the grade. A red outline means heavy midday rain — the forecast may be off by an hour or two.",
   popCommuteNote: (toA, toB, homeA, homeB) =>
@@ -505,6 +537,7 @@ const EN: Strings = {
       preset: "Rider type",
       workdays: "Commute days",
       parked_days: "Parked on",
+      winter_tyres_entity: "Winter tyres entity",
     },
     helpers: {
       rain_threshold:
@@ -521,6 +554,8 @@ const EN: Strings = {
       preset: "Fills the rain and wind thresholds below",
       workdays: "The card shows the next five of these, skipping the others.",
       parked_days: "Days the parked window applies.",
+      winter_tyres_entity:
+        "On = winter tyres (no icy-road badges). Leave empty to guess from recent weather.",
     },
     noteTasks1: "Activities default to ",
     noteTasks2: " (≤ 0.3 mm wet) and ",
@@ -574,7 +609,8 @@ const NB: Strings = {
   popDryAgain: "Tørre igjen etter",
   popNightDry: "Natt (ingen kjøring, halv tørkefart)",
   popParked: "Parkert innendørs",
-  popNoSalt: "Veisalt vurderes ikke.",
+  popNoSalt:
+    "Etter frost regnes veiene som saltet til ~10 mm regn har vasket dem — imens teller all fukt som vått.",
   popWetVal: (mm) => `${mm} mm/t`,
   popSpan: (from, until) => `${from}–${until}`,
   popParkedVal: (from, until, days) => `${from}–${until} på ${days}`,
@@ -647,12 +683,14 @@ const NB: Strings = {
   whenClear: "klart",
   whenDry: "tørker opp",
   whenWet: "våte veier",
-  washInfo: (kind, time) =>
+  washInfo: (kind, time, salted) =>
     kind === "clear"
       ? "Ingen nedbør meldt — veiene holder seg tørre."
       : kind === "dryBeforeDrive"
         ? "Regn, men veiene er tørre igjen før du kjører."
-        : `Våte veier mens du kjører fra ${time}.`,
+        : salted
+          ? `Saltede veier våte mens du kjører fra ${time}.`
+          : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
   cRain: "regn",
@@ -661,6 +699,10 @@ const NB: Strings = {
   cBreezy: "vindfullt",
   cCloudburst: "styrtregn",
   cDangerousGusts: "farlige vindkast",
+  cLightSnow: "lett snø",
+  cSnow: "snø",
+  cHeavySnow: "kraftig snø",
+  cIcy: "mulig glatte veier",
   cToWork: (w) => `${w} til jobb`,
   cHome: (w) => `${w} hjem`,
   cAnd: " + ",
@@ -676,6 +718,9 @@ const NB: Strings = {
   cVerdictF: "Ikke sykle",
   cTileHint: (hh, mm, eff, mean, gust) =>
     `${hh}:00 · ${mm} mm · vind ${eff} m/s (middel ${mean}, kast ${gust})`,
+  cTileHintSnow: (hh, cm, eff, mean, gust) =>
+    `${hh}:00 · ${cm} cm snø · vind ${eff} m/s (middel ${mean}, kast ${gust})`,
+  cHintTemp: (temp, icy) => `${temp} °C${icy ? ", vått tidligere" : ""}`,
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
   cOutlook: "utsikter",
@@ -706,7 +751,15 @@ const NB: Strings = {
     `Farlig: regn over ${rain} mm/t eller effektiv vind over ${wind} m/s, uansett dine terskler.`,
   popEffWind: (pct) =>
     `Effektiv vind er middelvinden, eller ${pct} % av kastene når de er uvanlig kraftige.`,
-  popWinter: "Snø og is vurderes ikke ennå.",
+  popSnowUnit: "snøfall, cm/t (når snø dominerer)",
+  popSnowLabel: "snø",
+  popSnowLine: (ok, danger) =>
+    `Snø, cm/t: fint ingen · tålelig ≤ ${ok} · dårlig > ${ok} · farlig > ${danger}`,
+  popIcyLine: (night, now) =>
+    `Snøfnugg-merke: veien kan være glatt på sommerdekk (våt vei, natt ≤ +${night} °C, nå ≤ +${now} °C). Endrer ikke karakteren.`,
+  popTyresAuto: "Sommerdekk antatt: ingen frost dagene før i går og ingen snø på bakken",
+  popTyresEntity: (entity, winter) =>
+    `Dekk fra ${entity}: ${winter === null ? "utilgjengelig, gjetter ut fra været" : winter ? "vinter" : "sommer"}`,
   popMidday:
     "Midt på dagen endrer ikke karakteren. Rød kant betyr kraftig regn midt på dagen — varselet kan bomme med en time eller to.",
   popCommuteNote: (toA, toB, homeA, homeB) =>
@@ -768,6 +821,7 @@ const NB: Strings = {
       preset: "Syklisttype",
       workdays: "Pendledager",
       parked_days: "Parkert på",
+      winter_tyres_entity: "Vinterdekk-entitet",
     },
     helpers: {
       rain_threshold:
@@ -784,6 +838,8 @@ const NB: Strings = {
       preset: "Fyller ut regn- og vindtersklene under",
       workdays: "Kortet viser de neste fem av disse, og hopper over resten.",
       parked_days: "Dager parkeringsvinduet gjelder.",
+      winter_tyres_entity:
+        "På = vinterdekk (ingen glatt-vei-merker). La stå tom for å gjette ut fra været.",
     },
     noteTasks1: "Aktiviteter er som standard ",
     noteTasks2: " (≤ 0,3 mm fukt) og ",

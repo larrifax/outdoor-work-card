@@ -19,7 +19,13 @@ import {
   planCommute,
   DANGER_RAIN,
   DANGER_WIND,
+  DANGER_SNOW,
   GUST_FACTOR,
+  ICY_NIGHT_MAX,
+  ICY_NOW_MAX,
+  SNOW_OK,
+  icyWatchFrom,
+  summerTyres,
   type CommuteResult,
   type CommuteDay,
   type CommuteWindow,
@@ -346,6 +352,11 @@ export class OutdoorWorkCard extends LitElement {
             >${icons.wind(12)}<span class="mono">9</span></span
           ></span
         ><span class="v">${t.popWindUnit}</span>
+        <span class="k"
+          ><span style="display:flex;align-items:center;gap:4px"
+            >${icons.snowflake(11)}<span class="mono">0.8</span></span
+          ></span
+        ><span class="v">${t.popSnowUnit}</span>
       </div>
       <div class="note">${t.popTileNote} ${t.popEffWind(Math.round(GUST_FACTOR * 100))}</div>
       <div class="h">${t.popScales}</div>
@@ -358,8 +369,21 @@ export class OutdoorWorkCard extends LitElement {
         <span class="k">${icons.wind(12)}${t.popWindLabel}</span
         ><span class="mono">≤ ${r.windFine}</span><span class="mono">≤ ${r.windOk}</span
         ><span class="mono">&gt; ${r.windOk}</span><span class="mono">&gt; ${DANGER_WIND}</span>
+        <span class="k">${icons.snowflake(11)}${t.popSnowLabel}</span><span class="mono">0</span
+        ><span class="mono">≤ ${SNOW_OK}</span><span class="mono">&gt; ${SNOW_OK}</span
+        ><span class="mono">&gt; ${DANGER_SNOW}</span>
       </div>
-      <div class="note">${t.popDangerLine(DANGER_RAIN, DANGER_WIND)}</div>
+      <div class="note">
+        ${t.popDangerLine(DANGER_RAIN, DANGER_WIND)} ${t.popSnowLine(SNOW_OK, DANGER_SNOW)}
+      </div>
+      <div class="note">
+        ${t.popIcyLine(ICY_NIGHT_MAX, ICY_NOW_MAX)}
+        ${
+          r.winterTyresEntity
+            ? t.popTyresEntity(r.winterTyresEntity, this._tyres(r).winter)
+            : t.popTyresAuto
+        }
+      </div>
       <div class="h">${t.popDayGrade}</div>
       <div class="grades">
         <span class="gb" style="background:var(--owc-accent)">A</span><span>${t.popGradeA}</span>
@@ -371,7 +395,7 @@ export class OutdoorWorkCard extends LitElement {
       </div>
       <div class="note">
         ${t.popCommuteNote(fmt(r.toWork[0]), fmt(r.toWork[1]), fmt(r.home[0]), fmt(r.home[1]))}
-        ${t.popMidday} ${t.popWinter}
+        ${t.popMidday}
       </div>
       <div class="src">${t.popSrc(model)}</div>
     `;
@@ -379,8 +403,18 @@ export class OutdoorWorkCard extends LitElement {
 
   // ---- commute mode -------------------------------------------------------
 
+  /** Winter-tyres entity state: true/false when on/off, null when set but unusable, undefined when unset. */
+  /** `winter`: entity says on/off, null when unset or unusable (then `icyWatch` is the weather guess). */
+  private _tyres(r: Resolved): { winter: boolean | null; icyWatch: boolean } {
+    const state = r.winterTyresEntity ? this.hass?.states?.[r.winterTyresEntity]?.state : undefined;
+    const winter = state === "on" ? true : state === "off" ? false : null;
+    const guess = winter === null && summerTyres(this._weather!.hours, Date.now(), r.tz);
+    return { winter, icyWatch: icyWatchFrom(state, guess) };
+  }
+
   private _renderCommute(r: Resolved, t: Strings): TemplateResult {
-    const deps = [this._weather, this._config, this._tick, r.tz, r.lang];
+    const { icyWatch } = this._tyres(r);
+    const deps = [this._weather, this._config, this._tick, r.tz, r.lang, icyWatch];
     const memo = this._commuteMemo;
     if (memo && memo.deps.every((d, i) => d === deps[i])) return this._commuteView(r, t, memo.res);
     const res: CommuteResult = planCommute(this._weather!.hours, Date.now(), {
@@ -394,6 +428,7 @@ export class OutdoorWorkCard extends LitElement {
       windOk: r.windOk,
       workdays: r.workdays,
       days: 5,
+      icyWatch,
       names: { short: r.names.short, full: r.names.full },
       today: t.cToday,
       tomorrow: t.cTomorrow,
@@ -404,6 +439,10 @@ export class OutdoorWorkCard extends LitElement {
         breezy: t.cBreezy,
         cloudburst: t.cCloudburst,
         dangerousGusts: t.cDangerousGusts,
+        lightSnow: t.cLightSnow,
+        snow: t.cSnow,
+        heavySnow: t.cHeavySnow,
+        icy: t.cIcy,
         toWork: t.cToWork,
         home: t.cHome,
         and: t.cAnd,
@@ -487,11 +526,19 @@ export class OutdoorWorkCard extends LitElement {
         </div>
         ${this._tiles(d.toWork, t)}
         <div class=${classMap({ mid: true, flag: d.midday.flag })} title=${d.reason}>
-          <span class="val"
-            ><span class="ic${d.midday.rain}">${icons.drop(10)}</span
-            >${d.midday.mm.toFixed(1)}</span
-          >
-          <span class="val tot">Σ ${d.midday.total.toFixed(1)}</span>
+          ${
+            d.midday.snowDom
+              ? html`<span class="val"
+                    ><span class="ic${d.midday.snowLevel}">${icons.snowflake(10)}</span
+                    >${d.midday.snow.toFixed(1)}</span
+                  >
+                  <span class="val tot">Σ ${d.midday.snowTotal.toFixed(1)}</span>`
+              : html`<span class="val"
+                    ><span class="ic${d.midday.rain}">${icons.drop(10)}</span
+                    >${d.midday.mm.toFixed(1)}</span
+                  >
+                  <span class="val tot">Σ ${d.midday.total.toFixed(1)}</span>`
+          }
         </div>
         ${this._tiles(d.home, t)}
       </div>
@@ -504,7 +551,7 @@ export class OutdoorWorkCard extends LitElement {
         ${w.cells.map(
           (c: HourCell) => html`
             <div
-              class=${classMap({ tile: true, [`l${c.level}`]: true, passed: c.passed, missing: c.missing })}
+              class=${classMap({ tile: true, [`l${c.level}`]: true, passed: c.passed, missing: c.missing, icy: c.icy })}
               tabindex=${c.missing ? nothing : 0}
               style=${styleMap({ "anchor-name": `--owc-h-${c.t}` })}
               @pointerenter=${c.missing ? nothing : this._showTip}
@@ -513,13 +560,22 @@ export class OutdoorWorkCard extends LitElement {
               @blur=${c.missing ? nothing : this._hideTip}
             >
               <span class="hh">${c.level === 3 ? icons.alert(9) : nothing}${c.label}</span>
+              ${c.icy ? html`<span class="icy">${icons.snowflake(9)}</span>` : nothing}
               ${
                 c.missing
                   ? html`<span class="val">—</span>`
                   : html`
-                      <span class="val"
-                        ><span class="ic${c.rain}">${icons.drop(10)}</span>${c.mm.toFixed(1)}</span
-                      >
+                      ${
+                        c.snowDom
+                          ? html`<span class="val"
+                              ><span class="ic${c.snowLevel}">${icons.snowflake(10)}</span
+                              >${c.snow.toFixed(1)}</span
+                            >`
+                          : html`<span class="val"
+                              ><span class="ic${c.rain}">${icons.drop(10)}</span
+                              >${c.mm.toFixed(1)}</span
+                            >`
+                      }
                       <span class="val"
                         ><span class="ic${c.windLevel}">${icons.wind(11)}</span
                         >${Math.round(c.eff)}</span
@@ -528,13 +584,17 @@ export class OutdoorWorkCard extends LitElement {
                         class="tip"
                         popover="hint"
                         style=${styleMap({ "position-anchor": `--owc-h-${c.t}` })}
-                        >${t.cTileHint(
+                        >${(c.snowDom ? t.cTileHintSnow : t.cTileHint)(
                           c.label,
-                          c.mm.toFixed(1),
+                          (c.snowDom ? c.snow : c.mm).toFixed(1),
                           String(Math.round(c.eff)),
                           String(Math.round(c.wind)),
                           String(Math.round(c.gust)),
-                        )}</span
+                        )}${
+                          c.temp === null
+                            ? nothing
+                            : html`<br />${t.cHintTemp(String(Math.round(c.temp)), c.icy)}`
+                        }</span
                       >
                     `
               }
@@ -880,7 +940,7 @@ export class OutdoorWorkCard extends LitElement {
         <span class="mm ${d.clean ? "" : "bad"}">${mm}</span>
         <span class="when">${when}</span>
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
-          >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz))}</span
+          >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz), d.salted)}</span
         >
       </div>
       <div

@@ -76,6 +76,8 @@ export interface CardConfig {
   wind_ok?: number;
   /** ISO weekdays, 1 = Monday … 7 = Sunday (default [1,2,3,4,5]). Commute: days shown. Carwash: days the parked window applies. */
   workdays?: number[];
+  /** `input_boolean` / `switch` / `binary_sensor`: on = winter tyres (no icy-road badges). Empty = guess from weather. */
+  winter_tyres_entity?: string;
 }
 
 export interface HourPoint {
@@ -89,6 +91,12 @@ export interface HourPoint {
   gust?: number;
   /** FAO reference evapotranspiration during this hour, mm (0 when missing). */
   et0: number;
+  /** Snowfall during this hour, cm (0 when missing). Included in `mm` as water. */
+  snow?: number;
+  /** 2 m air temperature, °C (null when missing: "not cold"). */
+  temp?: number | null;
+  /** Snow depth on the ground, m (0 when missing). */
+  snowDepth?: number;
   /** True when this hour is in the past (from the archive part of the response). */
   past: boolean;
 }
@@ -109,4 +117,5 @@ export interface HassLike {
   };
   language?: string;
   locale?: { language?: string };
+  states?: Record<string, { state: string }>;
 }

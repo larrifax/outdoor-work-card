@@ -7,6 +7,10 @@
  * two commutes only and is fixed for the whole day: hours that have already passed
  * still count, so the letter never changes between the morning and the afternoon.
  * Midday never changes the grade; it only raises a home-office flag.
+ *
+ * Snow is split out of the precipitation total and graded on its own fixed cm/h scale.
+ * A slippery-roads marker (`icy`) flags hours where a wet road met a cold night; it is
+ * informational only and never changes a level or the grade.
  */
 import type { HourPoint } from "./types";
 import { localParts, zonedToUtc } from "./time";
@@ -30,6 +34,25 @@ export const DANGER_RAIN = 8;
 /** Midday flag: one hour above rainOk, or a midday total above this many × rainOk. */
 const MIDDAY_TOTAL_FACTOR = 3;
 
+/** Open-Meteo's conversion: 7 cm snow ≈ 10 mm water. */
+const SNOW_CM_PER_MM = 0.7;
+// ponytail: fixed snow scale (cm/h), independent of rider presets. Upgrade path: make configurable if riders ask.
+/** Snowfall above this is "bad" (≤ is tolerable)… */
+export const SNOW_OK = 0.5;
+/** …and above this "dangerous". */
+export const DANGER_SNOW = 3;
+// ponytail: fixed slippery-roads heuristic. Ceiling: air temperature only, no road-surface data; upgrade to configurable if riders ask.
+/** Look back this many hours for precipitation that wet the road… */
+const ICY_LOOKBACK_H = 12;
+/** …and count it as wet above this total (mm). */
+const ICY_WET_MM = 0.1;
+/** Night minimum at or below this (°C) since the last precipitation… */
+export const ICY_NIGHT_MAX = 2;
+/** …and the hour itself at or below this (°C). */
+export const ICY_NOW_MAX = 4;
+/** Tyre guess: frost-free days before yesterday that mean summer tyres. */
+const TYRE_FROST_DAYS = 5;
+
 /**
  * Localized fragments the reason line is assembled from. Kept out of this module so
  * the pure logic stays language-agnostic; the card passes them in from i18n.
@@ -42,6 +65,11 @@ export interface CommutePhrases {
   /** level-3 rain / wind */
   cloudburst: string;
   dangerousGusts: string;
+  lightSnow: string;
+  snow: string;
+  heavySnow: string;
+  /** slippery-roads fragment, composed with toWork / home */
+  icy: string;
   /** e.g. `(w) => \`${w} to work\`` */
   toWork: (what: string) => string;
   /** e.g. `(w) => \`${w} home\`` */
@@ -81,6 +109,8 @@ export interface CommuteOptions {
   tomorrow?: string;
   /** Localized fragments for the reason line. */
   phrases?: CommutePhrases;
+  /** Rider is on summer tyres: evaluate the slippery-roads marker. Default false. */
+  icyWatch?: boolean;
 }
 
 export interface HourCell {
@@ -88,17 +118,28 @@ export interface HourCell {
   t: number;
   /** "07" */
   label: string;
+  /** total precipitation incl. snow water, mm */
   mm: number;
+  /** snowfall, cm/h */
+  snow: number;
+  /** snow water > 50% of `mm`: show snowflake + cm */
+  snowDom: boolean;
+  /** 2 m air temperature, °C (null when missing) */
+  temp: number | null;
   /** mean wind, m/s */
   wind: number;
   /** gust speed, m/s (falls back to mean) */
   gust: number;
   /** effective wind, m/s: max(mean, gust × GUST_FACTOR) */
   eff: number;
+  /** level of the rain part (precipitation minus snow water) */
   rain: Level;
+  snowLevel: Level;
   windLevel: Level;
-  /** worse of the two */
+  /** worst of rain, snow and wind */
   level: Level;
+  /** road may be icy (summer tyres only); never changes `level` */
+  icy: boolean;
   /** the hour is already over */
   passed: boolean;
   /** no forecast for this hour */
@@ -108,8 +149,11 @@ export interface HourCell {
 export interface CommuteWindow {
   cells: HourCell[];
   rain: Level;
+  snow: Level;
   wind: Level;
   level: Level;
+  /** some cell is icy */
+  icy: boolean;
 }
 
 export interface MiddaySummary {
@@ -117,9 +161,17 @@ export interface MiddaySummary {
   mm: number;
   /** total mm over the window */
   total: number;
-  /** level of the peak hour */
+  /** level of the peak rain-part hour */
   rain: Level;
-  /** heavy midday rain on an A–C day: rain may drift into a commute, consider home office */
+  /** peak snowfall, cm/h */
+  snow: number;
+  /** total snowfall, cm */
+  snowTotal: number;
+  /** level of the peak snow hour */
+  snowLevel: Level;
+  /** snow water > 50% of the midday total */
+  snowDom: boolean;
+  /** heavy midday rain or snow on an A–C day: rain may drift into a commute, consider home office */
   flag: boolean;
 }
 
@@ -186,6 +238,10 @@ const EN_PHRASES: CommutePhrases = {
   breezy: "breezy",
   cloudburst: "cloudburst",
   dangerousGusts: "dangerous gusts",
+  lightSnow: "light snow",
+  snow: "snow",
+  heavySnow: "heavy snow",
+  icy: "icy roads possible",
   toWork: (w) => `${w} to work`,
   home: (w) => `${w} home`,
   and: " + ",
@@ -197,6 +253,27 @@ const EN_PHRASES: CommutePhrases = {
 
 export function gradeToLight(g: Grade): Light {
   return g === "A" || g === "B" ? 0 : g === "C" ? 1 : 2;
+}
+
+/**
+ * Automatic tyre guess: summer tyres while there was no frost in the TYRE_FROST_DAYS days
+ * ending at the start of yesterday, and no snow lies on the ground now. The window stops
+ * before yesterday so the first night or two of a cold snap still produce warnings.
+ */
+export function summerTyres(hours: HourPoint[], now: number, tz: string): boolean {
+  const p = localParts(now, tz);
+  const to = zonedToUtc(p.y, p.m, p.d - 1, 0, 0, tz);
+  const from = zonedToUtc(p.y, p.m, p.d - 1 - TYRE_FROST_DAYS, 0, 0, tz);
+  for (const h of hours) {
+    if (h.t >= from && h.t < to && h.temp != null && h.temp <= 0) return false;
+    if (h.t <= now && now < h.t + H && (h.snowDepth ?? 0) > 0) return false;
+  }
+  return true;
+}
+
+/** Winter-tyres entity state → icyWatch. Missing / unavailable / unknown falls back to the guess. */
+export function icyWatchFrom(state: string | undefined, summerGuess: boolean): boolean {
+  return state === "on" ? false : state === "off" ? true : summerGuess;
 }
 
 export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions): CommuteResult {
@@ -216,26 +293,62 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   const worse = (a: Level, b: Level): Level => (a > b ? a : b);
   const rainWords = ["", ph.lightRain, ph.rain, ph.cloudburst];
   const windWords = ["", ph.breezy, ph.strongWind, ph.dangerousGusts];
+  const snowWords = ["", ph.lightSnow, ph.snow, ph.heavySnow];
+  const snowLevel = (cm: number): Level =>
+    cm <= 0 ? 0 : cm > DANGER_SNOW ? 3 : cm <= SNOW_OK ? 1 : 2;
+  /** Precipitation split: total mm, snowfall cm, snow water mm, rain part mm. */
+  const split = (p: HourPoint | undefined) => {
+    const mm = p?.mm ?? 0;
+    const snow = p?.snow ?? 0;
+    const water = snow / SNOW_CM_PER_MM;
+    return { mm, snow, water, rain: Math.max(0, mm - water) };
+  };
+
+  /** Wet road in the last ICY_LOOKBACK_H hours (or snowing now), a cold night since, and not yet thawed. */
+  const icyAt = (t: number, p: HourPoint | undefined): boolean => {
+    if (!o.icyWatch || p?.temp == null || p.temp > ICY_NOW_MAX) return false;
+    const snowing = (p.snow ?? 0) > 0;
+    let wet = 0;
+    let lastWet = snowing ? t : -Infinity;
+    for (let k = ICY_LOOKBACK_H; k >= 1; k--) {
+      const q = byT.get(t - k * H);
+      if (!q || q.mm <= 0) continue;
+      wet += q.mm;
+      if (!snowing) lastWet = t - k * H;
+    }
+    if (!snowing && wet <= ICY_WET_MM) return false;
+    for (let u = lastWet; u <= t; u += H) {
+      const q = byT.get(u)?.temp;
+      if (q != null && q <= ICY_NIGHT_MAX) return true;
+    }
+    return false;
+  };
 
   const cellAt = (t: number): HourCell => {
     const p = byT.get(t);
     const lp = localParts(t, o.tz);
-    const mm = p?.mm ?? 0;
+    const s = split(p);
     const wind = p?.wind ?? 0;
     const gust = p?.gust ?? wind;
     const eff = Math.max(wind, gust * GUST_FACTOR);
-    const rain = rainLevel(mm);
+    const rain = rainLevel(s.rain);
+    const sl = snowLevel(s.snow);
     const wl = windLevel(eff);
     return {
       t,
       label: String(lp.h).padStart(2, "0"),
-      mm,
+      mm: s.mm,
+      snow: s.snow,
+      snowDom: s.water > 0.5 * s.mm,
+      temp: p?.temp ?? null,
       wind,
       gust,
       eff,
       rain,
+      snowLevel: sl,
       windLevel: wl,
-      level: worse(rain, wl),
+      level: worse(worse(rain, sl), wl),
+      icy: icyAt(t, p),
       passed: t + H <= now,
       missing: !p,
     };
@@ -247,8 +360,16 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     for (let h = Math.floor(a / 60); h * 60 < b; h++)
       cells.push(cellAt(zonedToUtc(y, m, d, h, 0, o.tz)));
     const rain = cells.reduce<Level>((acc, c) => worse(acc, c.rain), 0);
+    const snow = cells.reduce<Level>((acc, c) => worse(acc, c.snowLevel), 0);
     const wind = cells.reduce<Level>((acc, c) => worse(acc, c.windLevel), 0);
-    return { cells, rain, wind, level: worse(rain, wind) };
+    return {
+      cells,
+      rain,
+      snow,
+      wind,
+      level: worse(worse(rain, snow), wind),
+      icy: cells.some((c) => c.icy),
+    };
   };
 
   const middayFor = (
@@ -260,16 +381,37 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   ): MiddaySummary => {
     let peak = 0;
     let total = 0;
+    let rainPeak = 0;
+    let rainTotal = 0;
+    let snowPeak = 0;
+    let snowTotal = 0;
+    let water = 0;
     for (let h = Math.floor(a / 60); h * 60 < b; h++) {
-      const p = byT.get(zonedToUtc(y, m, d, h, 0, o.tz));
-      if (!p) continue;
-      peak = Math.max(peak, p.mm);
-      total += p.mm;
+      const s = split(byT.get(zonedToUtc(y, m, d, h, 0, o.tz)));
+      peak = Math.max(peak, s.mm);
+      total += s.mm;
+      rainPeak = Math.max(rainPeak, s.rain);
+      rainTotal += s.rain;
+      snowPeak = Math.max(snowPeak, s.snow);
+      snowTotal += s.snow;
+      water += s.water;
     }
     // Only on A–C days: on D/E/F the grade already says "don't".
     const flag =
-      gradeToLight(grade) < 2 && (peak > o.rainOk || total > MIDDAY_TOTAL_FACTOR * o.rainOk);
-    return { mm: peak, total, rain: rainLevel(peak), flag };
+      gradeToLight(grade) < 2 &&
+      (rainPeak > o.rainOk ||
+        rainTotal > MIDDAY_TOTAL_FACTOR * o.rainOk ||
+        snowLevel(snowPeak) >= 2);
+    return {
+      mm: peak,
+      total,
+      rain: rainLevel(rainPeak),
+      snow: snowPeak,
+      snowTotal,
+      snowLevel: snowLevel(snowPeak),
+      snowDom: water > 0.5 * total,
+      flag,
+    };
   };
 
   // Walk forward from today, keeping workdays until we have `days`. Today is skipped once its home window is over.
@@ -304,11 +446,18 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
                 : "A";
     const midday = middayFor(p.y, p.m, p.d, o.midday, grade);
 
+    // Precipitation words from the worse of rain and snow (snow wins a tie), then wind, then icy.
     const words = (w: CommuteWindow): string =>
-      [rainWords[w.rain], windWords[w.wind]].filter(Boolean).join(ph.and);
+      [
+        w.snow >= w.rain ? snowWords[w.snow] : rainWords[w.rain],
+        windWords[w.wind],
+        w.icy ? ph.icy : "",
+      ]
+        .filter(Boolean)
+        .join(ph.and);
     const bits: string[] = [];
-    if (toWork.level) bits.push(ph.toWork(words(toWork)));
-    if (home.level) bits.push(ph.home(words(home)));
+    if (toWork.level || toWork.icy) bits.push(ph.toWork(words(toWork)));
+    if (home.level || home.icy) bits.push(ph.home(words(home)));
     const unknown = [...toWork.cells, ...home.cells].some((c) => c.missing);
     const reason = unknown
       ? ph.noData
