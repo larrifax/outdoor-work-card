@@ -9,6 +9,7 @@ Ships in **v2.0.0** together with `docs/carwash-roads-spec.md`. It doesn't depen
 Work mode decides when the ground is dry enough to mow or paint by counting **hours since the last rainy hour** (above `rain_threshold`, 0.2 mm). Each task needs a fixed number of hours: Mow 24 h, Paint 24 h before plus 24 h after.
 
 That is wrong in both directions:
+
 - A 0.3 mm shower on a sunny, windy summer day is dry in 2–4 h, but it still blocks mowing for a full day.
 - 15 mm of rain on a grey autumn day can leave the ground wet well past 24 h.
 - Drizzle just under the threshold never counts, however long it lasts.
@@ -49,22 +50,26 @@ The user sees "24 h dry" and trusts it, but the number ignores both how much rai
 ## Implementation Decisions
 
 **Weather data**
+
 - Add hourly `et0_fao_evapotranspiration` (mm/h) to the Open-Meteo request. `metno_seamless` returns it for the full horizon (checked in Oslo: about 0.2–0.26 mm/h at midday and about 0 at night in late September, 0.7–2 mm per day).
 - `HourPoint` gains `et0` (mm/h). A missing value falls back to 0, so it never dries faster than the data says.
 - Past days go to **7** so that the counter has enough warm-up. The winter spec makes the same change. Whichever spec lands first does it.
 
 **Wetness counter (pure logic)**
+
 - Walk the series in order, starting at 0: `w = clamp(w + mm − et0 × DRYING_FACTOR, 0, CAP)`.
 - `DRYING_FACTOR = 1.0` and `CAP = 15` mm are code constants marked `ponytail:`. Ceiling: ET0 refers to short grass, not wood or soil. Upgrade path: make the factor per task if users ask.
 - Wetness at a moment = the counter value after the last full hour before that moment.
 
 **Task config**
+
 - A `TaskConfig` holds `name`, `max_wet` (mm, 0–5) and optionally `after` (hours, as today).
 - Defaults: Mow `{ max_wet: 0.3 }`, Paint `{ max_wet: 0.1, after: 24 }`.
 - `before` is removed from the type. The resolver ignores it if present. A task without `max_wet` gets 0.3.
 - `rain_threshold` stays. It's used only for "rain during the window" and for the `after` runway.
 
 **Day evaluation**
+
 - `wetAtStart` = wetness at the scheduled window start. Today that's the effective start, `max(start, now)`, the same as the existing window logic.
 - Per task: `ok = usable && wetAtStart ≤ max_wet && (after unset || after ≥ task.after)`, where `usable` is unchanged (window exists, not passed, long enough, no rain during it).
 - Per task `dryAt`: the first hour boundary at or after the window start where the forecast wetness is ≤ `max_wet`. Null if that never happens within the data. It equals the window start when the ground is already dry.
@@ -73,6 +78,7 @@ The user sees "24 h dry" and trusts it, but the number ignores both how much rai
 - The task verdicts (next and longest day) and `tonightOk` are unchanged in structure.
 
 **Dry-by cell (row UI)**
+
 - If every task has `wetAtStart ≤ max_wet`: show ✓ in the accent colour.
 - Otherwise pick the not-yet-dry task with the **lowest** `max_wet` (ties go to config order). Show `{task} {time}`:
   - `time` is `HH:MM` when `dryAt` is on the same local day, `{short weekday} HH:MM` when it's later, and `—` when it's null.
@@ -82,31 +88,34 @@ The user sees "24 h dry" and trusts it, but the number ignores both how much rai
 - Column header: `Dry by`.
 
 **Hero**
+
 - Task subtitle (`need`): `dry ground (≤ {max_wet} mm)`, plus ` · {after} h no rain after` when `after` is set.
 - Detail for the next OK day: `{w} mm at window open · {after-hours} dry after · {light} of light`. The after-part appears only when `after` is set. Keep the longest-day part as today.
 
 **Info popover (work)**
+
 - Replace the per-task "dry before" rows with `≤ {max_wet} mm` (plus the after-hours when set).
 - Add one line: `Ground wetness: rain adds to it, evaporation (sun, wind, warmth) removes it — about 1–2 mm a day in autumn, 3–5 in summer.`
 
 **Editor**
+
 - Tasks stay YAML-only, as today. Update the editor note text to show `max_wet` in the example.
 
 **Wording (English; Norwegian Bokmål `nb` needs equivalents in the same tone)**
 
-| Purpose | English |
-|---|---|
-| Column header | `Dry by` |
-| Cell, all dry | `✓` |
-| Cell, waiting | `{task} {time}` |
-| Cell, never | `{task} —` |
-| Tooltip head | `Ground wetness {w} mm at {HH:MM}` |
-| Tooltip task OK | `{task} OK` |
-| Tooltip task later | `{task} dry from {time}` |
-| Tooltip task never | `{task} not dry in forecast` |
-| Hero need | `dry ground (≤ {mm} mm)` / `dry ground (≤ {mm} mm) · {h} h no rain after` |
-| Hero detail | `{w} mm at window open` |
-| Popover line | see above |
+| Purpose            | English                                                                   |
+| ------------------ | ------------------------------------------------------------------------- |
+| Column header      | `Dry by`                                                                  |
+| Cell, all dry      | `✓`                                                                       |
+| Cell, waiting      | `{task} {time}`                                                           |
+| Cell, never        | `{task} —`                                                                |
+| Tooltip head       | `Ground wetness {w} mm at {HH:MM}`                                        |
+| Tooltip task OK    | `{task} OK`                                                               |
+| Tooltip task later | `{task} dry from {time}`                                                  |
+| Tooltip task never | `{task} not dry in forecast`                                              |
+| Hero need          | `dry ground (≤ {mm} mm)` / `dry ground (≤ {mm} mm) · {h} h no rain after` |
+| Hero detail        | `{w} mm at window open`                                                   |
+| Popover line       | see above                                                                 |
 
 ## Testing Decisions
 

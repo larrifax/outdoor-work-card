@@ -46,18 +46,21 @@ The card also can't warn about slippery roads. The dangerous mornings for a comm
 ## Implementation Decisions
 
 **Weather data**
+
 - Add hourly `snowfall` (cm), `temperature_2m` (°C) and `snow_depth` (m) to the Open-Meteo request. `metno_seamless` returns all three for the full horizon with no gaps (checked for Tromsø).
 - `HourPoint` gains `snow` (cm/h), `temp` (°C) and `snowDepth` (m). Missing values: `snow` falls back to 0, `snowDepth` to 0, and `temp` to `null`. Temperature-based rules treat `null` as "not cold".
 - Past days go from 3 to 7. This is still one shared fetch, and work and carwash mode don't care about the extra history (7 is needed for the tyre guess below).
 - Work and carwash mode ignore the new fields.
 
 **Rain vs snow within an hour**
+
 - Snow water (mm) = `snow / 0.7`. This is Open-Meteo's documented conversion: 7 cm snow ≈ 10 mm water.
 - Rain (mm) = `max(0, precipitation − snow water)`.
 - Rain is graded on the rider's rain thresholds as in the grading spec. Snow is graded on the snow scale. The hour's precipitation level is the worse of the two, and the hour's overall level is the worse of precipitation and wind.
 - **Snow dominates** when snow water > 50% of `precipitation`. In that case the tile shows a snowflake and the snowfall in cm with one decimal. Otherwise it shows a drop and mm as today.
 
 **Snow scale (cm/h), fixed and independent of presets**
+
 - 0 fine: no snowfall.
 - 1 tolerable: > 0 and ≤ 0.5.
 - 2 bad: > 0.5.
@@ -65,6 +68,7 @@ The card also can't warn about slippery roads. The dangerous mornings for a comm
 - These are code constants marked `ponytail:`. Upgrade path: make them configurable if riders ask.
 
 **Slippery-roads marker (`icy`) for a commute hour**
+
 - All three of these must hold:
   1. **Wet road:** total `precipitation` in the 12 h before the hour is > 0.1 mm, or the hour itself has snowfall.
   2. **Cold night:** the minimum `temp` from the last precipitation hour in that 12 h window up to the hour is ≤ +2 °C.
@@ -75,6 +79,7 @@ The card also can't warn about slippery roads. The dangerous mornings for a comm
 - The cell exposes `icy` and `temp`. The window exposes `icy` if any of its cells is `icy`.
 
 **Tyre state: whether `icyWatch` is on**
+
 - A new `planCommute` option `icyWatch: boolean`. The card computes it, so the logic stays pure.
 - **Entity override:** a new config key `winter_tyres_entity`. When it's set and the entity state is `on`, winter tyres are on and `icyWatch` is false. When it's `off`, `icyWatch` is true. When the entity is missing, `unavailable` or `unknown`, the card falls back to the automatic guess.
 - **Automatic guess** (a pure function over hours, now and tz): summer tyres, so `icyWatch` true, when:
@@ -82,42 +87,47 @@ The card also can't warn about slippery roads. The dangerous mornings for a comm
   - `snowDepth` at the current hour is 0.
 
   The window ends before yesterday so that the first night or two of a cold snap still produce warnings. The card needs 7 past days for this.
+
 - `HassLike` gains an optional `states` map (`Record<string, { state: string }>`). The card reads the entity from it on every render. No subscription is needed, because HA pushes a new `hass` object when states change.
 
 **Midday**
+
 - The midday summary also tracks peak snow (cm/h), total snow (cm), and whether snow dominates the midday total.
 - The midday flag also fires when peak midday snow is > 0.5 cm/h (snow level ≥ bad). The suppression rule stays: the flag only shows on A–C days.
 - The midday cell shows a snowflake and cm when snow dominates midday, and a drop and mm otherwise.
 
 **Reason line**
+
 - Precipitation words per window come from the worse of rain and snow. On a tie, the snow words win.
 - Snow words: `light snow` (1), `snow` (2), `heavy snow` (3).
 - When a window is `icy`, append the icy fragment for that leg after the weather words.
 
 **Card UI**
+
 - New `snowflake` icon. It's used as the precipitation icon when snow dominates, and as a corner badge on `icy` tiles. Tile colour and level are unchanged by the badge.
 - Tile hint adds a temperature line: `{temp} °C`, plus `, wet earlier` when `icy`.
 - Info popover: snow scale thresholds, the marker rule, the tyre state source (automatic or entity), and a line saying the marker never changes the grade. Remove the "not assessed yet" line.
 
 **Editor**
+
 - In the commute section, add `winter_tyres_entity` with the built-in `entity` selector, filtered to the `input_boolean`, `switch` and `binary_sensor` domains. It's optional, with a helper text explaining on/off.
 
 **Wording (English; Norwegian Bokmål `nb` needs equivalents in the same tone)**
 
-| Purpose | English |
-|---|---|
-| Snow fragment, level 1 | `light snow` |
-| Snow fragment, level 2 | `snow` |
-| Snow fragment, level 3 | `heavy snow` |
-| Icy fragment | `icy roads possible` (composed with the existing to-work / home templates, e.g. "icy roads possible to work") |
-| Hint temperature | `{temp} °C` |
-| Hint icy suffix | `, wet earlier` |
-| Popover snow line | `Snow, cm/h: fine none · tolerable ≤ 0.5 · bad > 0.5 · dangerous > 3` |
-| Popover icy line | `Snowflake badge: road may be icy on summer tyres (wet road, night ≤ +2 °C, now ≤ +4 °C). Doesn't change the grade.` |
-| Popover tyres, automatic | `Summer tyres assumed: no frost in the days before yesterday and no snow on the ground` |
-| Popover tyres, entity | `Tyres from {entity}: {on → "winter", off → "summer"}` |
-| Editor label | `Winter tyres entity` |
-| Editor helper | `On = winter tyres (no icy-road badges). Leave empty to guess from recent weather.` |
+| Purpose                  | English                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Snow fragment, level 1   | `light snow`                                                                                                         |
+| Snow fragment, level 2   | `snow`                                                                                                               |
+| Snow fragment, level 3   | `heavy snow`                                                                                                         |
+| Icy fragment             | `icy roads possible` (composed with the existing to-work / home templates, e.g. "icy roads possible to work")        |
+| Hint temperature         | `{temp} °C`                                                                                                          |
+| Hint icy suffix          | `, wet earlier`                                                                                                      |
+| Popover snow line        | `Snow, cm/h: fine none · tolerable ≤ 0.5 · bad > 0.5 · dangerous > 3`                                                |
+| Popover icy line         | `Snowflake badge: road may be icy on summer tyres (wet road, night ≤ +2 °C, now ≤ +4 °C). Doesn't change the grade.` |
+| Popover tyres, automatic | `Summer tyres assumed: no frost in the days before yesterday and no snow on the ground`                              |
+| Popover tyres, entity    | `Tyres from {entity}: {on → "winter", off → "summer"}`                                                               |
+| Editor label             | `Winter tyres entity`                                                                                                |
+| Editor helper            | `On = winter tyres (no icy-road badges). Leave empty to guess from recent weather.`                                  |
 
 ## Testing Decisions
 
@@ -149,6 +159,7 @@ Builds on the carwash wet-roads model. It uses the `temp` and `snowfall` fields 
 **Problem.** Salted roads spray salty slush at far lower moisture than rain-wet roads do, and salt stays on the road for days after the frost that triggered it. The wet-roads model alone lets a car be washed on a damp, salted morning.
 
 **Rule (pure logic, in the carwash road-state walk)**
+
 - **Salt trigger:** an hour with `temp ≤ +1 °C` and either wet roads or snowfall > 0. It marks the roads as **salted** and resets a wash-off counter to 0.
 - **Salt wash-off:** each later hour adds its `precipitation` to the counter. Roads stop being salted once the counter reaches **10 mm**.
 - **While salted,** the wet threshold is **0.1 mm** instead of `ok_rain`. Any measurable moisture wets the road. Drying time and night half-speed are unchanged.
@@ -160,11 +171,13 @@ Builds on the carwash wet-roads model. It uses the `temp` and `snowfall` fields 
 **Data.** Past days (7, set above) are enough warm-up for most cases. Salt triggered more than 7 days ago with little rain since is missed. Accept this, and note it with a `ponytail:` comment.
 
 **UI**
+
 - A day that is dirty because of salted roads gets hint text `Salted roads wet while you drive from {time}.` instead of the plain wet-roads text.
 - The info popover replaces `Road salt is not assessed.` with `After frost, roads count as salted until ~10 mm of rain has washed them — then any moisture counts as wet.`
 - Norwegian equivalents in the same tone.
 
 **Tests (through `planWash`)**
+
 - Frost with 0.3 mm, then 0.15 mm the next day: dirty. The same 0.15 mm without earlier frost: clean.
 - Salt ends after 10 mm of total rain since the trigger. After that, 0.15 mm is clean again.
 - A frost hour on dry roads with no snowfall doesn't trigger salt.

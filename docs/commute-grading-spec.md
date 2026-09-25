@@ -60,35 +60,42 @@ The card also has no way to say "this is dangerous" as opposed to "this is unple
 ## Implementation Decisions
 
 **Weather data**
+
 - The Open-Meteo request adds the `wind_gusts_10m` hourly variable. `metno_seamless` returns it for the full 10-day horizon (checked).
 - `HourPoint` gains a `gust` field (m/s, 10 m). A missing value falls back to the mean wind.
 - The shared fetch cache key doesn't change. Work and wash mode ignore `gust`.
 
 **Effective wind (commute logic)**
+
 - `eff = max(mean, gust × 0.6)`. The factor is a code constant marked with a `ponytail:` comment. Upgrade path: make it configurable if riders ask.
 - Reasoning: inland gust factors run about 1.5–1.7, so in steady wind `gust × 0.6 ≈ mean`. The number rises above the mean only when gusts are unusually strong for the mean.
 - `wind_fine` / `wind_ok` compare against `eff`.
 
 **Hour levels**
+
 - `Level` goes from 0–2 to 0–3: 0 fine, 1 tolerable, 2 bad, 3 dangerous.
 - Dangerous: `eff > 14` m/s (≈ gusts above 23 m/s, near MET wind-warning level) or rain `> 8` mm/h. Both are fixed code constants, independent of rider thresholds, and marked `ponytail:`.
 - Each hour cell exposes mean wind, gust, effective wind, rain, the rain level, the wind level and the combined level. The old `gust` level field on the cell is renamed to avoid confusion with the new gust speed.
 
 **Grade**
+
 - Worst hour per window as today, with level 3 added.
 - F if either window has a level-3 hour. Otherwise, with `a`/`b` being the two window levels: A if both are 0. B if one is 1 and the other 0. C if both are 1. D if exactly one is 2. E if both are 2.
 - `Grade` becomes `"A" | "B" | "C" | "D" | "E" | "F"`. Traffic light: A/B 0, C 1, D/E/F 2. F gets its own badge style class.
 - Midday no longer feeds into the grade.
 
 **Midday summary**
+
 - The fields become peak mm/h, total mm, a rain level, and a `flag` boolean. Mean wind is removed.
 - `flag = grade ∈ {A, B, C} && (peak > rainOk || total > 3 × rainOk)`.
 - The reason line appends the localized midday-flag fragment when `flag` is set. It replaces the current "rain midday" fragment.
 
 **Reason line**
+
 - Rain words: light rain (1), rain (2), cloudburst/heavy rain (3). Wind words: breezy (1), strong wind (2), dangerous gusts (3). Legs are joined as today.
 
 **Presets**
+
 - Defined once as a constant table shared by the editor and the README values:
   - Fair-weather: rain 0.1 / 0.3 · wind 5 / 8
   - Everyday: rain 0.2 / 0.8 · wind 6 / 10
@@ -99,6 +106,7 @@ The card also has no way to say "this is dangerous" as opposed to "this is unple
 - A small pure function maps four threshold values to a preset id or `custom`. The editor uses it.
 
 **Card UI**
+
 - The tile wind value shows the rounded `eff`.
 - Tiles become focusable and reuse the existing wash-mode hint mechanism: `popover="hint"`, CSS anchor positioning, and the shared show/hide handlers on pointerenter/leave and focus/blur. Tapping works through focus. Hint content: hour, rain mm, effective wind, mean and gust.
 - Dangerous tiles: red fill plus a warning icon (added to the icon set if it's missing).
@@ -107,6 +115,7 @@ The card also has no way to say "this is dangerous" as opposed to "this is unple
 - Info popover: wind row labelled "effective wind", a danger-threshold line, grade legend A–F with the new meanings, and one midday-flag line.
 
 **i18n**
+
 - New or changed strings in every supported language: dangerous rain and wind fragments, the midday-flag fragment, the F caption/verdict/legend, the new B–E legend meanings, the effective-wind label, the tile hint template, preset option labels and the preset field label/helper.
 
 ## Testing Decisions
@@ -137,18 +146,22 @@ The card also has no way to say "this is dangerous" as opposed to "this is unple
 ## Implementation Notes for the Agent
 
 **Baseline**
+
 - Build on the current working tree. Commute mode itself is not committed yet (the commute module and its test file are untracked, and several other files are modified). Don't reset, stash or check out a clean `main`.
 - Work on a new branch off the current state. Commit when done. Don't push or open a PR unless asked.
 
 **Existing tests that must change (not the code)**
+
 - The commute test file has a grade-ladder test that expects B for "midday rain only". It also has a midday test that asserts mean wind and grade B. Both encode the old behaviour. Rewrite them to the new grade table and midday fields. Don't bend the code to keep them passing.
 - The test options use `rainOk: 1.0`. Keep explicit values in tests. Only the resolver default changes.
 - The browser screenshot test mounts work and carwash cards only, and its weather fixture has no wind or gust data. Add one commute card to it. Give the fixture `wind_speed_10m` and `wind_gusts_10m` series that produce at least a B, a C/D, an F and one midday-flag day within the frozen-clock week. Then regenerate the two screenshot PNGs.
 
 **Caption, verdict and badge for F**
+
 - Hero caption and verdict are currently arrays indexed by traffic light (0–2). F shares light 2 with D/E, but needs its own text. Add separate F caption and verdict strings. Pick F's strings when the grade is F, and fall back to the light-indexed arrays otherwise. The grade badge gets a class for F in addition to the light class.
 
 **Editor preset select: change handling**
+
 - `ha-form` sends the whole data object on every change, including the preset field's current displayed value. Rule in the change handler:
   - If the preset field's value differs from the value computed for the pre-change config, and is not `custom`, overwrite the four threshold keys with that preset's values.
   - Otherwise ignore the preset field. The threshold edit stands, and the displayed preset is recomputed on the next render.
@@ -157,35 +170,37 @@ The card also has no way to say "this is dangerous" as opposed to "this is unple
 
 **Wording (English; Norwegian Bokmål `nb` is the only other language and needs equivalents in the same tone)**
 
-| Purpose | English |
-|---|---|
-| Rain fragment, level 3 | `cloudburst` |
-| Wind fragment, level 3 | `dangerous gusts` |
-| Midday flag fragment (replaces "rain midday") | ` · heavy rain midday — consider home office` |
-| F hero caption | `Dangerous to ride` |
-| F hero verdict | `Don't bike` |
-| Popover grade A | `both commutes fine` |
-| Popover grade B | `one commute tolerable` |
-| Popover grade C | `both commutes tolerable` |
-| Popover grade D | `one commute bad` |
-| Popover grade E | `both commutes bad` |
-| Popover grade F | `a commute hour is dangerous` |
-| Popover wind unit label | `effective wind, m/s` |
-| Popover danger line | `Dangerous: rain above 8 mm/h or effective wind above 14 m/s, whatever your thresholds` |
-| Popover effective-wind line | `Effective wind is the mean, or 60% of the gust speed when gusts are unusually strong` |
-| Popover winter line | `Snow and ice are not assessed yet` |
-| Popover midday line | `Midday doesn't change the grade. A red outline means heavy midday rain — the forecast may be off by an hour or two` |
-| Tile hint | `{hh}:00 · {mm} mm · wind {eff} m/s (mean {mean}, gusts {gust})` |
-| Editor preset label | `Rider type` |
-| Editor preset helper | `Fills the rain and wind thresholds below` |
-| Preset options | `Fair-weather`, `Everyday`, `All-weather`, `Custom` |
+| Purpose                                       | English                                                                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Rain fragment, level 3                        | `cloudburst`                                                                                                         |
+| Wind fragment, level 3                        | `dangerous gusts`                                                                                                    |
+| Midday flag fragment (replaces "rain midday") | ` · heavy rain midday — consider home office`                                                                        |
+| F hero caption                                | `Dangerous to ride`                                                                                                  |
+| F hero verdict                                | `Don't bike`                                                                                                         |
+| Popover grade A                               | `both commutes fine`                                                                                                 |
+| Popover grade B                               | `one commute tolerable`                                                                                              |
+| Popover grade C                               | `both commutes tolerable`                                                                                            |
+| Popover grade D                               | `one commute bad`                                                                                                    |
+| Popover grade E                               | `both commutes bad`                                                                                                  |
+| Popover grade F                               | `a commute hour is dangerous`                                                                                        |
+| Popover wind unit label                       | `effective wind, m/s`                                                                                                |
+| Popover danger line                           | `Dangerous: rain above 8 mm/h or effective wind above 14 m/s, whatever your thresholds`                              |
+| Popover effective-wind line                   | `Effective wind is the mean, or 60% of the gust speed when gusts are unusually strong`                               |
+| Popover winter line                           | `Snow and ice are not assessed yet`                                                                                  |
+| Popover midday line                           | `Midday doesn't change the grade. A red outline means heavy midday rain — the forecast may be off by an hour or two` |
+| Tile hint                                     | `{hh}:00 · {mm} mm · wind {eff} m/s (mean {mean}, gusts {gust})`                                                     |
+| Editor preset label                           | `Rider type`                                                                                                         |
+| Editor preset helper                          | `Fills the rain and wind thresholds below`                                                                           |
+| Preset options                                | `Fair-weather`, `Everyday`, `All-weather`, `Custom`                                                                  |
 
 The existing popover note says midday is "shown for context only". Update it to match the midday line above, or drop the midday part in favour of that line.
 
 **README**
+
 - Document the three presets as a table (the values above). Also note: `wind_*` now compares against effective wind, the new F grade, the midday flag, and the `rain_ok` default change.
 
 **Done when**
+
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and `pnpm test` all pass. `pnpm test` also runs the browser screenshot test through Playwright/Chromium.
 - The regenerated screenshots show the commute card with an F day, a flagged midday cell and effective-wind tiles, in both themes. Inspect them visually before committing.
 

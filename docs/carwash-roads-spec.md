@@ -9,6 +9,7 @@ Independent of the commute specs. Ships as v2.0.0.
 Carwash mode is meant for a driver who parks indoors at home, often at work too, and drives most days. For that driver, rain on the parked car is harmless. What gets the car dirty is **driving on wet roads**: spray throws road grime onto the paint, and that keeps happening after the rain has stopped.
 
 Today's model judges the wrong thing:
+
 - It grades rain **falling**. It checks each hour's peak mm/h against `ok_rain` (0.5) by day and `night_max` (4) at night.
 - `ok_rain` 0.5 mm/h is steady light rain. That already soaks the roads, because roads are wet from about 0.1–0.2 mm.
 - Six hours of 0.4 mm/h drizzle (2.4 mm) counts as harmless, yet soaks the roads just as well as one 2.4 mm hour.
@@ -19,6 +20,7 @@ Today's model judges the wrong thing:
 ## Solution
 
 Replace the rain-falling model with a **wet-roads** model:
+
 - Roads turn **wet** when an hour has more than `ok_rain` mm (new default 0.2).
 - Roads are **dry** again after `dry_roads_hours` rain-free hours (new default 3). Drying runs at half speed during the night window.
 - **Driving hours** are every hour outside the night window, except an optional **parked** window on workdays, which covers the car indoors at work.
@@ -59,6 +61,7 @@ Replace the rain-falling model with a **wet-roads** model:
 ## Implementation Decisions
 
 **Config**
+
 - `ok_rain` keeps its key. New meaning: mm in an hour above which roads turn wet. New default **0.2**, range 0–5.
 - `dry_roads_hours` keeps its key. New meaning: rain-free hours until wet roads are dry. New default **3**, range 0–24.
 - `night_from` / `night_until` keep their defaults, 22:00 / 06:00. New meaning: no driving happens, and drying runs at half speed.
@@ -68,6 +71,7 @@ Replace the rain-falling model with a **wet-roads** model:
 - Parsing follows the existing resolver conventions: clamped numbers, `HH:MM` parsing and fallbacks.
 
 **Road state (pure logic)**
+
 - Walk the hourly series in order and keep a drying counter:
   - An hour with `mm > okRain` makes the road wet, with remaining drying = `dryRoadsHours`.
   - Otherwise, when the road is wet, drying decreases by 1 (0.5 if the hour lies in the night window), and the road becomes dry when drying reaches ≤ 0.
@@ -76,10 +80,12 @@ Replace the rain-falling model with a **wet-roads** model:
 - The half-speed factor is a code constant marked `ponytail:`. Ceiling: it ignores temperature, sun and wind. Upgrade path: temperature-aware drying once the winter spec adds `temp`.
 
 **Driving hours**
+
 - `driving(h)` = not in the night window, and not (the parked window is set, the day is a workday, and the hour is in the parked window).
 - Night and parked windows use half-open ranges, `[from, until)`, like today's night check. Night windows that wrap past midnight keep working as today.
 
 **Day status**
+
 - `dirty(day)` = any hour in the day that is driving and wet.
 - Wash-day status: `eveningClean` = no driving + wet hour from `evening` (wash time, or now if later, today) to the end of the day. It replaces `eveningTolerated`. The old lead-hours rule is gone, because the drying counter covers it. Rain at 16:00 with `dry_roads_hours` 3 leaves the roads wet at 18:00, so the evening is ruled out.
 - `tolerated` becomes `clean` = not `dirty`. `hasData` handling stays the same.
@@ -89,41 +95,44 @@ Replace the rain-falling model with a **wet-roads** model:
 - New per-day fields: `wetFrom` / `dryAt` (UTC ms or null). These are the first driving hour with wet roads, and the time roads are dry again, for the hint.
 
 **Icons**
+
 - `sun`: no hour with rain above 0.05 mm in the day.
 - `moon`: rain fell, but no driving hour has wet roads. On the wash day this means from the wash time on.
 - `rain`: dirty.
 - `drop` is no longer produced for wash days. Leave the icon itself in the icon set if other modes use it.
 
 **Hints and popover**
+
 - Day hint by kind: clear, `dryBeforeDrive` (rain, roads dry before you drive), or `wetWhileDriving` (with the time roads are wet from). Hint kinds `earlier` / `night` / `daytime` are replaced.
 - Next-rain hint: "Roads wet while driving {day} {from}–{to}", keeping the total/peak stats.
 - Popover rows: wet threshold, drying time, night window with half speed, parked window (only when set, with its days), and a line saying road salt isn't assessed. The harmless-day/night rows are removed.
 - Day subtitle/describe text in the hero trade-off follows the new kinds. For example "Monday's wet roads (from 07:00)" replaces "Monday's daytime rain (2.6 mm/h)".
 
 **Editor (carwash section)**
+
 - Fields: `wash_start`, `ok_rain` (step 0.1, mm), `dry_roads_hours`, `night_from` / `night_until`, `parked_start` / `parked_end` (time), and `workdays` (the same multi-select as commute).
 - Remove `night_max`.
 - Update the helpers to describe the new meanings.
 
 **Wording (English; Norwegian Bokmål `nb` needs equivalents in the same tone)**
 
-| Purpose | English |
-|---|---|
-| Day kind, clear | `No rain forecast — roads stay dry.` |
-| Day kind, dry before drive | `Rain, but roads are dry again before you drive.` |
-| Day kind, wet while driving | `Roads wet while you drive from {time}.` |
-| Day short label: clear / dry / wet | `clear` / `dries off` / `wet roads` |
-| Next dirty stretch | `Roads wet while driving {day} {from}–{to} ({hours} h)` |
-| Out tip | `{n}+ days until you'd drive on wet roads` |
-| Out dirty | `Roads wet at or after wash time` |
-| Describe (hero trade-off) | `{day}'s wet roads (from {time})` |
-| Popover: wet threshold | `Roads wet above` → `{mm} mm/h` |
-| Popover: drying | `Dry again after` → `{h} h without rain` |
-| Popover: night | `Night (no driving, half-speed drying)` → `{from}–{until}` |
-| Popover: parked | `Parked indoors` → `{from}–{until} on {days}` |
-| Popover: salt | `Road salt is not assessed.` |
-| Editor labels | `Wet-road threshold`, `Dry again after (hours)`, `Parked from`, `Parked until`, `Parked on` |
-| Editor helpers | ok_rain: `Rain per hour that makes roads wet`. dry_roads_hours: `Rain-free hours until roads are dry (half speed at night)`. parked: `Optional: hours your car is parked indoors on workdays` |
+| Purpose                            | English                                                                                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Day kind, clear                    | `No rain forecast — roads stay dry.`                                                                                                                                                          |
+| Day kind, dry before drive         | `Rain, but roads are dry again before you drive.`                                                                                                                                             |
+| Day kind, wet while driving        | `Roads wet while you drive from {time}.`                                                                                                                                                      |
+| Day short label: clear / dry / wet | `clear` / `dries off` / `wet roads`                                                                                                                                                           |
+| Next dirty stretch                 | `Roads wet while driving {day} {from}–{to} ({hours} h)`                                                                                                                                       |
+| Out tip                            | `{n}+ days until you'd drive on wet roads`                                                                                                                                                    |
+| Out dirty                          | `Roads wet at or after wash time`                                                                                                                                                             |
+| Describe (hero trade-off)          | `{day}'s wet roads (from {time})`                                                                                                                                                             |
+| Popover: wet threshold             | `Roads wet above` → `{mm} mm/h`                                                                                                                                                               |
+| Popover: drying                    | `Dry again after` → `{h} h without rain`                                                                                                                                                      |
+| Popover: night                     | `Night (no driving, half-speed drying)` → `{from}–{until}`                                                                                                                                    |
+| Popover: parked                    | `Parked indoors` → `{from}–{until} on {days}`                                                                                                                                                 |
+| Popover: salt                      | `Road salt is not assessed.`                                                                                                                                                                  |
+| Editor labels                      | `Wet-road threshold`, `Dry again after (hours)`, `Parked from`, `Parked until`, `Parked on`                                                                                                   |
+| Editor helpers                     | ok_rain: `Rain per hour that makes roads wet`. dry_roads_hours: `Rain-free hours until roads are dry (half speed at night)`. parked: `Optional: hours your car is parked indoors on workdays` |
 
 ## Testing Decisions
 
