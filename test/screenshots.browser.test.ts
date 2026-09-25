@@ -146,9 +146,17 @@ for (const theme of ["dark", "light"] as const) {
     expect(washPop, "carwash popover open").toBeTruthy();
     const washVals = [...washPop.querySelectorAll(".grid .v")].map((v) => v.textContent?.trim());
     expect(
-      washVals.some((v) => v?.includes("0.5 mm/h")),
+      washVals.some((v) => v?.includes("0.2 mm in an hour")),
       "ok_rain in popover",
     ).toBe(true);
+    expect(washPop.querySelector(".note")?.textContent).toContain("Road salt");
+
+    // Dry-by column: ✓ on good days, a waiting task on wet ones, "—" when never dry.
+    const cells = (i: number) =>
+      [...cards[i]!.shadowRoot!.querySelectorAll(".dryby .num")].map((n) => n.textContent?.trim());
+    expect(cells(0)).toContain("✓");
+    expect(cells(0).some((c) => /^Paint \d\d:\d\d$/.test(c ?? ""))).toBe(true);
+    expect(cells(1)).toContain("Paint —");
 
     // Design E hero states: wash-tonight card (idx 2) vs a skip card (idx 3).
     const okRoot = cards[2]!.shadowRoot!;

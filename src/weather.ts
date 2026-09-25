@@ -51,7 +51,7 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const p = new URLSearchParams({
     latitude: req.lat.toFixed(4),
     longitude: req.lon.toFixed(4),
-    hourly: "precipitation,wind_speed_10m,wind_gusts_10m",
+    hourly: "precipitation,wind_speed_10m,wind_gusts_10m,et0_fao_evapotranspiration",
     wind_speed_unit: "ms",
     models: req.model,
     past_days: String(req.pastDays),
@@ -67,11 +67,20 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const mm: (number | null)[] = json.hourly?.precipitation ?? [];
   const ws: (number | null)[] = json.hourly?.wind_speed_10m ?? [];
   const wg: (number | null)[] = json.hourly?.wind_gusts_10m ?? [];
+  // Missing ET0 counts as 0: never dry faster than the data says.
+  const et: (number | null)[] = json.hourly?.et0_fao_evapotranspiration ?? [];
   const now = Date.now();
   const hours: HourPoint[] = times.map((t, i) => {
     const ms = t * 1000;
     const wind = ws[i] ?? 0;
-    return { t: ms, mm: mm[i] ?? 0, wind, gust: wg[i] ?? wind, past: ms + 3_600_000 <= now };
+    return {
+      t: ms,
+      mm: mm[i] ?? 0,
+      wind,
+      gust: wg[i] ?? wind,
+      et0: et[i] ?? 0,
+      past: ms + 3_600_000 <= now,
+    };
   });
   return { hours, fetchedAt: now, model: req.model };
 }

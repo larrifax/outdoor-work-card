@@ -124,7 +124,19 @@ const WORK = (e: EditorStrings): Schema => [
   },
 ];
 
-const WASH: Schema = [
+const weekdays = (lang: Lang) => ({
+  select: {
+    multiple: true,
+    mode: "list",
+    // ISO 1 = Mon … 7 = Sun; dayNames is indexed 0 = Sun.
+    options: [1, 2, 3, 4, 5, 6, 7].map((v) => ({
+      value: v,
+      label: dayNames(lang).full[v % 7],
+    })),
+  },
+});
+
+const WASH = (lang: Lang): Schema => [
   { name: "wash_start", selector: { time: {} } },
   {
     type: "grid",
@@ -133,14 +145,12 @@ const WASH: Schema = [
       {
         name: "ok_rain",
         selector: {
-          number: { min: 0, max: 5, step: 0.1, mode: "box", unit_of_measurement: "mm/h" },
+          number: { min: 0, max: 5, step: 0.1, mode: "box", unit_of_measurement: "mm" },
         },
       },
       {
-        name: "night_max",
-        selector: {
-          number: { min: 0, max: 20, step: 0.5, mode: "box", unit_of_measurement: "mm/h" },
-        },
+        name: "dry_roads_hours",
+        selector: { number: { min: 0, max: 24, step: 0.5, mode: "box", unit_of_measurement: "h" } },
       },
     ],
   },
@@ -153,9 +163,15 @@ const WASH: Schema = [
     ],
   },
   {
-    name: "dry_roads_hours",
-    selector: { number: { min: 0, max: 12, step: 0.5, mode: "box", unit_of_measurement: "h" } },
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "parked_start", selector: { time: {} } },
+      { name: "parked_end", selector: { time: {} } },
+    ],
   },
+  // Same `workdays` key as commute mode; labelled per mode via `_computeLabel`.
+  { name: "workdays", selector: weekdays(lang) },
 ];
 
 const COMMUTE = (e: EditorStrings, lang: Lang): Schema => [
@@ -221,20 +237,7 @@ const COMMUTE = (e: EditorStrings, lang: Lang): Schema => [
       },
     ],
   },
-  {
-    name: "workdays",
-    selector: {
-      select: {
-        multiple: true,
-        mode: "list",
-        // ISO 1 = Mon … 7 = Sun; dayNames is indexed 0 = Sun.
-        options: [1, 2, 3, 4, 5, 6, 7].map((v) => ({
-          value: v,
-          label: dayNames(lang).full[v % 7],
-        })),
-      },
-    },
-  },
+  { name: "workdays", selector: weekdays(lang) },
 ];
 
 @customElement("outdoor-work-card-editor")
@@ -271,15 +274,18 @@ export class OutdoorWorkCardEditor extends LitElement {
     const e = this._t;
     const mode = parseMode(this._config?.mode);
     const byMode: Record<Mode, () => Schema> = {
-      carwash: () => WASH,
+      carwash: () => WASH(this._lang),
       commute: () => COMMUTE(e, this._lang),
       work: () => WORK(e),
     };
     return [...COMMON(e, mode === "commute"), ...byMode[mode]()];
   }
 
-  private _computeLabel = (s: { name: string }) => this._t.labels[s.name] ?? s.name;
-  private _computeHelper = (s: { name: string }) => this._t.helpers[s.name] ?? "";
+  /** `workdays` means "parked on" in carwash mode. */
+  private _key = (name: string) =>
+    name === "workdays" && this._config?.mode === "carwash" ? "parked_days" : name;
+  private _computeLabel = (s: { name: string }) => this._t.labels[this._key(s.name)] ?? s.name;
+  private _computeHelper = (s: { name: string }) => this._t.helpers[this._key(s.name)] ?? "";
 
   private _changed(ev: CustomEvent): void {
     ev.stopPropagation();

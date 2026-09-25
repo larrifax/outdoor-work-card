@@ -4,19 +4,27 @@
 
 const H = 3600e3;
 
+/** Late-September ET0: ~0.2 mm/h around midday, a trickle otherwise (~1.7 mm/day). */
+const et0 = (t: number) => {
+  const h = (new Date(t).getUTCHours() + 2) % 24;
+  return h >= 10 && h < 16 ? 0.2 : h >= 8 && h < 18 ? 0.1 : 0.01;
+};
+
 function build(rain: [string, number][]) {
-  const start = Date.UTC(2026, 8, 13, 0, 0) - 2 * H; // Oslo midnight 13 Sep
+  const start = Date.UTC(2026, 8, 9, 0, 0) - 2 * H; // Oslo midnight 9 Sep (7 past days)
   const time: number[] = [];
   const precipitation: number[] = [];
-  for (let t = start; t < start + 15 * 24 * H; t += H) {
+  const et0_fao_evapotranspiration: number[] = [];
+  for (let t = start; t < start + 19 * 24 * H; t += H) {
     time.push(t / 1000);
     precipitation.push(0);
+    et0_fao_evapotranspiration.push(et0(t));
   }
   for (const [iso, mm] of rain) {
     const i = time.indexOf(Date.parse(iso + "+02:00") / 1000);
     if (i >= 0) precipitation[i] = mm;
   }
-  return { hourly: { time, precipitation } };
+  return { hourly: { time, precipitation, et0_fao_evapotranspiration } };
 }
 
 export const GOOD = build([
@@ -62,6 +70,8 @@ export const RAINY = build([
   ["2026-09-20T15:00", 1.3],
   ["2026-09-21T23:00", 0.4],
   ["2026-09-23T04:00", 1.0],
+  // A soaking beyond the outlook keeps the last days' ground from drying in the data ("—").
+  ["2026-09-25T12:00", 8.0],
 ]);
 
 // Commute scenario (keyed by latitude 59.93): Wed F (storm gusts home), Thu B

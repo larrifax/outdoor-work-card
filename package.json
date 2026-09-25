@@ -1,6 +1,6 @@
 {
   "name": "outdoor-work-card",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Home Assistant Lovelace card that finds dry windows for outdoor work (mowing, painting) and the best evening to wash the car.",
   "license": "MIT",
   "author": "Kristian Tryggestad",

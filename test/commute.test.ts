@@ -23,7 +23,7 @@ function series(set: Record<string, [number, number?, number?]> = {}): HourPoint
   const start = Date.UTC(2026, 8, 18, 22, 0); // 2026-09-19 00:00 Oslo (UTC+2)
   const hours: HourPoint[] = [];
   for (let t = start; t < start + 14 * 24 * H; t += H)
-    hours.push({ t, mm: 0, wind: 3, gust: 5, past: false });
+    hours.push({ t, mm: 0, wind: 3, gust: 5, et0: 0, past: false });
   for (const [iso, [mm, wind, gust]] of Object.entries(set)) {
     const t = Date.parse(iso + ":00+02:00");
     const h = hours.find((x) => x.t === t);

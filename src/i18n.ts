@@ -52,6 +52,8 @@ export function dayNames(lang: Lang): DayNames {
   return d;
 }
 
+export type WashKind = "clear" | "dryBeforeDrive" | "wetWhileDriving";
+
 export interface Strings {
   hUnit: string; // hour abbreviation, "h" / "t"
 
@@ -66,16 +68,23 @@ export interface Strings {
   passedToday: string;
   notTonight: string;
   tonight: string;
-  needBefore: (before: number) => string;
-  needBeforeAfter: (before: number, after: number) => string;
+  needDry: (mm: number) => string;
+  needDryAfter: (mm: number, after: number) => string;
   noDayMeets: string;
-  dryBeforehand: (x: string) => string;
+  /** Hero detail: ground wetness when the window opens. */
+  wetAtOpen: (mm: string) => string;
   afterPart: (x: string) => string;
   ofLight: (dur: string) => string;
   longestPart: (full: string, dur: string) => string;
   noWindowWeek: string;
   colDay: string;
-  colBefore: string;
+  colDryBy: string;
+  /** Dry-by cell: "{task} {time}", time "—" when never dry in forecast. */
+  dryByCell: (task: string, time: string) => string;
+  dryByHead: (mm: string, time: string) => string;
+  dryByOk: (task: string) => string;
+  dryByLater: (task: string, time: string) => string;
+  dryByNever: (task: string) => string;
   colWindow: string;
   colAfter: string;
   colGood: string;
@@ -90,20 +99,24 @@ export interface Strings {
   popHeadWork: string;
   popHeadCommute: string;
   popWashFrom: string;
-  popHarmlessDay: string;
-  popHarmlessNight: string;
-  popRoadsDry: string;
+  popWetAbove: string;
+  popDryAgain: string;
+  popNightDry: string;
+  popParked: string;
+  popNoSalt: string;
+  popWetVal: (mm: number) => string;
+  popSpan: (from: string, until: string) => string;
+  popParkedVal: (from: string, until: string, days: string) => string;
   popWeekdayWin: string;
   popWeekendWin: string;
   popIgnoreUnder: string;
   popCountsRain: string;
-  popUpTo: (mm: number) => string;
-  popNightVal: (mm: number, from: string, until: string) => string;
   popHours: (h: number) => string;
   popMinutes: (m: number) => string;
   popAboveRate: (mm: number) => string;
-  popDryBefore: (h: number) => string;
-  popDryBeforeAfter: (before: number, after: number) => string;
+  popWetMax: (mm: number) => string;
+  popWetMaxAfter: (mm: number, after: number) => string;
+  popWetness: string;
   popSrc: (model: string) => string;
 
   // --- car wash mode ---
@@ -131,17 +144,18 @@ export interface Strings {
   ctxStaysPast: string;
   whyOkBreak: (washStart: string, describe: string) => string;
   whyOkNoRain: (washStart: string) => string;
-  whyNone: (okRain: number) => string;
+  whyNone: string;
   /** Trade-off line, as bold-aware segments. */
   tradeoffFirst: (bestFull: string) => Seg[];
   tradeoffBuys: (waitDays: number, gain: number, openGain: boolean) => Seg[];
   tradeoffOnly: (waitDays: number) => Seg[];
-  describe: (full: string, night: boolean, peak: string) => string;
+  /** "Monday's wet roads (from 07:00)" */
+  describe: (full: string, from: string) => string;
   sectAsk: string;
   outTip: (streak: number, open: boolean) => string;
-  /** Tip when the wash evening itself is rained out (a "—" day). */
+  /** Tip when the roads are wet at wash time (a "—" day). */
   outDirty: string;
-  /** Headline sentence when the next rain event is known. */
+  /** Headline sentence when the next dirty stretch is known. */
   outNextRain: (day: string, from: string, to: string, hours: number) => string;
   statTotal: string;
   statPeak: string;
@@ -153,10 +167,10 @@ export interface Strings {
   dry: string;
   mm: (peak: string) => string;
   whenClear: string;
-  whenEarlier: string;
-  whenNight: string;
-  whenDaytime: string;
-  washInfo: (kind: "clear" | "earlier" | "night" | "daytime", peak: string) => string;
+  whenDry: string;
+  whenWet: string;
+  /** Day hint; `time` = first wet driving hour (wetWhileDriving only). */
+  washInfo: (kind: WashKind, time: string) => string;
   outDays: (streak: number, open: boolean) => string;
 
   // --- commute mode ---
@@ -265,16 +279,21 @@ const EN: Strings = {
   passedToday: "Today's window has passed",
   notTonight: "Not tonight",
   tonight: "Tonight",
-  needBefore: (b) => `needs ${b} h dry before`,
-  needBeforeAfter: (b, a) => `needs ${b} h before · ${a} h after`,
+  needDry: (mm) => `dry ground (≤ ${mm} mm)`,
+  needDryAfter: (mm, a) => `dry ground (≤ ${mm} mm) · ${a} h no rain after`,
   noDayMeets: "No day in the outlook meets that.",
-  dryBeforehand: (x) => `${x} dry beforehand`,
+  wetAtOpen: (mm) => `${mm} mm when the window opens`,
   afterPart: (x) => ` · ${x} after`,
   ofLight: (dur) => ` · ${dur} of light`,
   longestPart: (full, dur) => ` · longest: ${full} (${dur})`,
   noWindowWeek: "No window this week",
   colDay: "Day",
-  colBefore: "Dry before",
+  colDryBy: "Dry by",
+  dryByCell: (task, time) => `${task} ${time}`,
+  dryByHead: (mm, time) => `Ground wetness ${mm} mm at ${time}`,
+  dryByOk: (task) => `${task} OK`,
+  dryByLater: (task, time) => `${task} dry from ${time}`,
+  dryByNever: (task) => `${task} not dry in forecast`,
   colWindow: "Window",
   colAfter: "Dry after",
   colGood: "Good for",
@@ -288,20 +307,25 @@ const EN: Strings = {
   popHeadWork: "How days are judged",
   popHeadCommute: "How this card decides",
   popWashFrom: "Wash from",
-  popHarmlessDay: "Harmless by day",
-  popHarmlessNight: "Harmless at night",
-  popRoadsDry: "Roads dry for",
+  popWetAbove: "Roads wet above",
+  popDryAgain: "Dry again after",
+  popNightDry: "Night (no driving)",
+  popParked: "Parked indoors",
+  popNoSalt: "Road salt is not assessed.",
+  popWetVal: (mm) => `${mm} mm in an hour`,
+  popSpan: (from, until) => `${from}–${until} · half-speed drying`,
+  popParkedVal: (from, until, days) => `${from}–${until} · ${days}`,
   popWeekdayWin: "Weekday window",
   popWeekendWin: "Weekend window",
   popIgnoreUnder: "Ignore windows under",
   popCountsRain: "Counts as rain",
-  popUpTo: (mm) => `up to ${mm} mm/h`,
-  popNightVal: (mm, from, until) => `up to ${mm} mm/h · ${from}–${until}`,
-  popHours: (h) => `${h} h`,
+  popHours: (h) => `${h} h without rain`,
   popMinutes: (m) => `${m} min`,
   popAboveRate: (mm) => `above ${mm} mm/h`,
-  popDryBefore: (h) => `${h} h dry before`,
-  popDryBeforeAfter: (before, after) => `${before} h before · ${after} h after`,
+  popWetMax: (mm) => `≤ ${mm} mm wet`,
+  popWetMaxAfter: (mm, after) => `≤ ${mm} mm wet · ${after} h after`,
+  popWetness:
+    "Ground wetness: rain adds it, evaporation (sun, wind, warmth) removes it — about 1–2 mm a day in autumn, 3–5 in summer.",
   popSrc: (model) => `Open-Meteo · ${model}`,
 
   dash: "—",
@@ -311,7 +335,7 @@ const EN: Strings = {
       ? "clean, but not past tomorrow"
       : `${n}${open ? "+" : ""} clean ${n === 1 && !open ? "day" : "days"}`,
   bannerLbl: "Skip today",
-  bannerRain: (ws) => `rain around ${ws} rules out washing tonight`,
+  bannerRain: (ws) => `wet roads around ${ws} rule out washing tonight`,
   bannerBrief: (desc) => `a wash now won't last the day — ${desc}`,
   bannerLasts: (n, desc) => `a wash now lasts ${n} ${n === 1 ? "day" : "days"} — ${desc}`,
   bannerLastsNoBreak: (n) => `a wash now lasts ${n} ${n === 1 ? "day" : "days"}`,
@@ -321,10 +345,9 @@ const EN: Strings = {
   ctxSkipFrom: (ws, w) => `From ${ws}, ${w === 1 ? "tomorrow" : `${w} days from now`} · `,
   ctxStaysUntil: (desc) => `stays clean until ${desc}.`,
   ctxStaysPast: "stays clean past the end of the outlook.",
-  whyOkBreak: (ws, desc) => `Dry from ${ws} tonight. Stays clean until ${desc}.`,
-  whyOkNoRain: (ws) => `Dry from ${ws} tonight, and no spoiling rain in the whole outlook.`,
-  whyNone: (okRain) =>
-    `Every evening in the outlook is followed by rain above ${okRain} mm/h within a day.`,
+  whyOkBreak: (ws, desc) => `Dry roads from ${ws} tonight. Stays clean until ${desc}.`,
+  whyOkNoRain: (ws) => `Dry roads from ${ws} tonight, and no wet driving in the whole outlook.`,
+  whyNone: "Every evening in the outlook is followed by wet roads while you drive within a day.",
   tradeoffFirst: (best) => [`${best} is the first evening that works.`],
   tradeoffBuys: (w, gain, open) => [
     "Waiting ",
@@ -340,15 +363,15 @@ const EN: Strings = {
     { b: "1 more", gain: true },
     " clean day — tonight is nearly as good.",
   ],
-  describe: (full, night, peak) => `${full}'s ${night ? "night" : "daytime"} rain (${peak} mm/h)`,
+  describe: (full, from) => `${full}'s wet roads (from ${from})`,
   sectAsk: "When to wash?",
   outTip: (streak, open) =>
     streak === 0 && !open
-      ? "No upcoming dry-weather streak"
-      : `${streak}+ days until next real rainfall`,
-  outDirty: "Too wet to wash — rain during or right after the wash window",
+      ? "No upcoming dry-roads streak"
+      : `${streak}+ days until you'd drive on wet roads`,
+  outDirty: "Roads wet at wash time",
   outNextRain: (day, from, to, hours) =>
-    `Next real rain on ${day} between ${from}–${to} (${hours} h)`,
+    `Roads wet while driving ${day} ${from}–${to} (${hours} h)`,
   statTotal: "Total",
   statPeak: "Peak",
   unitMm: "mm",
@@ -359,17 +382,14 @@ const EN: Strings = {
   dry: "dry",
   mm: (peak) => `${peak} mm`,
   whenClear: "clear",
-  whenEarlier: "earlier",
-  whenNight: "night",
-  whenDaytime: "daytime",
-  washInfo: (kind, peak) =>
+  whenDry: "dries off",
+  whenWet: "wet roads",
+  washInfo: (kind, time) =>
     kind === "clear"
-      ? "No rain forecast — the car stays clean all day."
-      : kind === "earlier"
-        ? `Peak ${peak} mm/h falls before wash time, so the evening is still washable.`
-        : kind === "night"
-          ? `Peak ${peak} mm/h falls overnight — gentle enough to tolerate.`
-          : `Peak ${peak} mm/h during the day — heavy enough to dirty a clean car.`,
+      ? "No rain forecast — roads stay dry."
+      : kind === "dryBeforeDrive"
+        ? "Rain, but roads dry again before you drive."
+        : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
   cRain: "rain",
@@ -468,11 +488,12 @@ const EN: Strings = {
       min_window_minutes: "Ignore windows shorter than",
       rain_threshold: "Rain that wets the ground",
       wash_start: "Wash time",
-      ok_rain: "Harmless daytime rain up to",
-      night_max: "Harmless night rain up to",
+      ok_rain: "Wet-road threshold",
       night_from: "Night starts",
       night_until: "Night ends",
-      dry_roads_hours: "Roads must be dry for",
+      dry_roads_hours: "Dry again (hours)",
+      parked_start: "Parked from",
+      parked_end: "Parked until",
       to_work_start: "Ride to work from",
       to_work_end: "Ride to work until",
       home_start: "Ride home from",
@@ -483,26 +504,27 @@ const EN: Strings = {
       wind_ok: "Wind is tolerable up to",
       preset: "Rider type",
       workdays: "Commute days",
+      parked_days: "Parked on",
     },
     helpers: {
       rain_threshold: 'Anything above this counts as rain for "dry before / dry after".',
-      ok_rain: "Light drizzle under this will not smudge a clean car, day or night.",
-      night_max: "Heavier rain is tolerated overnight, when it does little cosmetic harm.",
+      ok_rain: "Rain per hour makes roads wet",
+      parked_start: "Optional: hours your car is parked indoors on workdays",
       min_window_minutes: "Evenings with less daylight than this are shown but never recommended.",
       model: "MET Nordic is the same model behind Yr; it only covers the Nordics.",
       accent: "Leave blank for the mode default (green for work, blue for car wash).",
-      dry_roads_hours:
-        "No heavy rain this long before the wash, so you are not driving a clean car on wet roads.",
+      dry_roads_hours: "Rain-free hours until roads dry (half speed at night)",
       rain_ok: 'Above this an hour is "bad". Between fine and this it is "tolerable".',
       wind_ok:
         'Effective wind at 10 m (mean, or more with strong gusts). Above this an hour is "bad".',
       preset: "Fills the rain and wind thresholds below",
       workdays: "The card shows the next five of these, skipping the others.",
+      parked_days: "Days the parked window applies.",
     },
     noteTasks1: "Activities default to ",
-    noteTasks2: " (24 h dry before) and ",
+    noteTasks2: " (≤ 0.3 mm wet) and ",
     noteTasks3:
-      " (24 h before, 24 h after). Add or change them in YAML with tasks: — e.g. - name: Stain deck, before: 48, after: 12.",
+      " (≤ 0.1 mm wet, 24 h no rain after). Add or change them in YAML with tasks: — e.g. - name: Stain deck, max_wet: 0.05, after: 12.",
     noteFetch:
       "The card fetches Open-Meteo directly from the browser — no sensors or helpers needed. Location defaults to your home.",
   },
@@ -519,16 +541,21 @@ const NB: Strings = {
   passedToday: "Kveldens vindu er passert",
   notTonight: "Ikke i kveld",
   tonight: "I kveld",
-  needBefore: (b) => `trenger ${b} t tørt før`,
-  needBeforeAfter: (b, a) => `trenger ${b} t før · ${a} t etter`,
+  needDry: (mm) => `tørr bakke (≤ ${mm} mm)`,
+  needDryAfter: (mm, a) => `tørr bakke (≤ ${mm} mm) · ${a} t uten regn etter`,
   noDayMeets: "Ingen dag i varselet klarer det.",
-  dryBeforehand: (x) => `${x} tørt på forhånd`,
+  wetAtOpen: (mm) => `${mm} mm når vinduet åpner`,
   afterPart: (x) => ` · ${x} etter`,
   ofLight: (dur) => ` · ${dur} med lys`,
   longestPart: (full, dur) => ` · lengst: ${full} (${dur})`,
   noWindowWeek: "Ingen vindu denne uka",
   colDay: "Dag",
-  colBefore: "Tørt før",
+  colDryBy: "Tørt kl.",
+  dryByCell: (task, time) => `${task} ${time}`,
+  dryByHead: (mm, time) => `Fuktighet i bakken ${mm} mm kl. ${time}`,
+  dryByOk: (task) => `${task} OK`,
+  dryByLater: (task, time) => `${task} tørt fra ${time}`,
+  dryByNever: (task) => `${task} ikke tørt i varselet`,
   colWindow: "Vindu",
   colAfter: "Tørt etter",
   colGood: "Egnet for",
@@ -542,20 +569,25 @@ const NB: Strings = {
   popHeadWork: "Slik vurderes dagene",
   popHeadCommute: "Slik bestemmer kortet",
   popWashFrom: "Vask fra",
-  popHarmlessDay: "Ufarlig på dagtid",
-  popHarmlessNight: "Ufarlig om natten",
-  popRoadsDry: "Veier tørre i",
+  popWetAbove: "Våte veier over",
+  popDryAgain: "Tørre igjen etter",
+  popNightDry: "Natt (ingen kjøring)",
+  popParked: "Parkert innendørs",
+  popNoSalt: "Veisalt vurderes ikke.",
+  popWetVal: (mm) => `${mm} mm i timen`,
+  popSpan: (from, until) => `${from}–${until} · tørker halvt så fort`,
+  popParkedVal: (from, until, days) => `${from}–${until} · ${days}`,
   popWeekdayWin: "Hverdagsvindu",
   popWeekendWin: "Helgevindu",
   popIgnoreUnder: "Ignorer vinduer under",
   popCountsRain: "Teller som regn",
-  popUpTo: (mm) => `opptil ${mm} mm/t`,
-  popNightVal: (mm, from, until) => `opptil ${mm} mm/t · ${from}–${until}`,
-  popHours: (h) => `${h} t`,
+  popHours: (h) => `${h} t uten regn`,
   popMinutes: (m) => `${m} min`,
   popAboveRate: (mm) => `over ${mm} mm/t`,
-  popDryBefore: (h) => `${h} t tørt før`,
-  popDryBeforeAfter: (before, after) => `${before} t før · ${after} t etter`,
+  popWetMax: (mm) => `≤ ${mm} mm fukt`,
+  popWetMaxAfter: (mm, after) => `≤ ${mm} mm fukt · ${after} t etter`,
+  popWetness:
+    "Fukt i bakken: regn legger til, fordampning (sol, vind, varme) trekker fra — rundt 1–2 mm i døgnet om høsten, 3–5 om sommeren.",
   popSrc: (model) => `Open-Meteo · ${model}`,
 
   dash: "—",
@@ -565,7 +597,7 @@ const NB: Strings = {
       ? "rent, men ikke forbi i morgen"
       : `${n}${open ? "+" : ""} rene ${n === 1 && !open ? "dag" : "dager"}`,
   bannerLbl: "Dropp i dag",
-  bannerRain: (ws) => `regn rundt ${ws} utelukker vask i kveld`,
+  bannerRain: (ws) => `våte veier rundt ${ws} utelukker vask i kveld`,
   bannerBrief: (desc) => `en vask nå holder ikke dagen ut — ${desc}`,
   bannerLasts: (n, desc) => `en vask nå varer ${n} ${n === 1 ? "dag" : "dager"} — ${desc}`,
   bannerLastsNoBreak: (n) => `en vask nå varer ${n} ${n === 1 ? "dag" : "dager"}`,
@@ -575,9 +607,9 @@ const NB: Strings = {
   ctxSkipFrom: (ws, w) => `Fra ${ws}, ${w === 1 ? "i morgen" : `om ${w} dager`} · `,
   ctxStaysUntil: (desc) => `holder seg rent til ${desc}.`,
   ctxStaysPast: "holder seg rent forbi slutten av varselet.",
-  whyOkBreak: (ws, desc) => `Tørt fra ${ws} i kveld. Holder seg rent til ${desc}.`,
-  whyOkNoRain: (ws) => `Tørt fra ${ws} i kveld, og ingen ødeleggende nedbør i hele varselet.`,
-  whyNone: (okRain) => `Hver kveld i varselet følges av nedbør over ${okRain} mm/t innen et døgn.`,
+  whyOkBreak: (ws, desc) => `Tørre veier fra ${ws} i kveld. Holder seg rent til ${desc}.`,
+  whyOkNoRain: (ws) => `Tørre veier fra ${ws} i kveld, og ingen våte veier i hele varselet.`,
+  whyNone: "Hver kveld i varselet følges av våte veier mens du kjører innen et døgn.",
   tradeoffFirst: (best) => [`${best} er første kveld som funker.`],
   tradeoffBuys: (w, gain, open) => [
     "Å vente ",
@@ -593,16 +625,15 @@ const NB: Strings = {
     { b: "1 dag", gain: true },
     " mer — i kveld er nesten like bra.",
   ],
-  describe: (full, night, peak) =>
-    `${night ? "nattregn" : "regn på dagen"} ${full.toLowerCase()} (${peak} mm/t)`,
+  describe: (full, from) => `våte veier ${full.toLowerCase()} (fra ${from})`,
   sectAsk: "Når skal du vaske?",
   outTip: (streak, open) =>
     streak === 0 && !open
-      ? "Ingen kommende tørrværsperiode"
-      : `${streak}+ dager til neste ordentlige nedbør`,
-  outDirty: "For vått til å vaske — nedbør under eller rett etter vaskevinduet",
+      ? "Ingen kommende periode med tørre veier"
+      : `${streak}+ dager til du kjører på våte veier`,
+  outDirty: "Våte veier ved vasketid",
   outNextRain: (day, from, to, hours) =>
-    `Neste ordentlige nedbør ${day} mellom ${from}–${to} (${hours} t)`,
+    `Våte veier mens du kjører ${day} ${from}–${to} (${hours} t)`,
   statTotal: "Totalt",
   statPeak: "Topp",
   unitMm: "mm",
@@ -613,17 +644,14 @@ const NB: Strings = {
   dry: "tørt",
   mm: (peak) => `${peak} mm`,
   whenClear: "klart",
-  whenEarlier: "tidligere",
-  whenNight: "natt",
-  whenDaytime: "dag",
-  washInfo: (kind, peak) =>
+  whenDry: "tørker opp",
+  whenWet: "våte veier",
+  washInfo: (kind, time) =>
     kind === "clear"
-      ? "Ingen nedbør meldt — bilen holder seg ren hele dagen."
-      : kind === "earlier"
-        ? `Topp ${peak} mm/t faller før vasketid, så kvelden er fortsatt vaskbar.`
-        : kind === "night"
-          ? `Topp ${peak} mm/t faller om natten — mildt nok til å tåles.`
-          : `Topp ${peak} mm/t på dagtid — kraftig nok til å skitne til en ren bil.`,
+      ? "Ingen nedbør meldt — veiene holder seg tørre."
+      : kind === "dryBeforeDrive"
+        ? "Regn, men veiene er tørre igjen før du kjører."
+        : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
   cRain: "regn",
@@ -722,11 +750,12 @@ const NB: Strings = {
       min_window_minutes: "Ignorer vinduer kortere enn",
       rain_threshold: "Regn som gjør bakken våt",
       wash_start: "Vasketidspunkt",
-      ok_rain: "Ufarlig dagregn opptil",
-      night_max: "Ufarlig nattregn opptil",
+      ok_rain: "Terskel for våte veier",
       night_from: "Natt starter",
       night_until: "Natt slutter",
-      dry_roads_hours: "Veiene må være tørre i",
+      dry_roads_hours: "Tørre igjen (timer)",
+      parked_start: "Parkert fra",
+      parked_end: "Parkert til",
       to_work_start: "Sykler til jobb fra",
       to_work_end: "Sykler til jobb til",
       home_start: "Sykler hjem fra",
@@ -737,26 +766,27 @@ const NB: Strings = {
       wind_ok: "Vind er tålelig opptil",
       preset: "Syklisttype",
       workdays: "Pendledager",
+      parked_days: "Parkert på",
     },
     helpers: {
       rain_threshold: 'Alt over dette teller som regn for "tørt før / tørt etter".',
-      ok_rain: "Lett duskregn under dette tilsmusser ikke en ren bil, dag eller natt.",
-      night_max: "Kraftigere regn tolereres om natta, når det gjør lite kosmetisk skade.",
+      ok_rain: "Regn per time som gjør veiene våte",
+      parked_start: "Valgfritt: timer bilen står parkert innendørs på arbeidsdager",
       min_window_minutes: "Kvelder med mindre dagslys enn dette vises, men anbefales aldri.",
       model: "MET Nordic er samme modell som ligger bak Yr; den dekker bare Norden.",
       accent: "La stå tom for modusstandarden (grønn for arbeid, blå for bilvask).",
-      dry_roads_hours:
-        "Ikke kraftig regn så lenge før vasken, så du ikke kjører en ren bil på våte veier.",
+      dry_roads_hours: "Timer uten regn før veiene er tørre (halvt så fort om natta)",
       rain_ok: 'Over dette er en time "dårlig". Mellom fint og dette er den "tålelig".',
       wind_ok:
         'Effektiv vind på 10 m (middel, eller mer ved kraftige kast). Over dette er en time "dårlig".',
       preset: "Fyller ut regn- og vindtersklene under",
       workdays: "Kortet viser de neste fem av disse, og hopper over resten.",
+      parked_days: "Dager parkeringsvinduet gjelder.",
     },
     noteTasks1: "Aktiviteter er som standard ",
-    noteTasks2: " (24 t tørt før) og ",
+    noteTasks2: " (≤ 0,3 mm fukt) og ",
     noteTasks3:
-      " (24 t før, 24 t etter). Legg til eller endre dem i YAML med tasks: — f.eks. - name: Beise terrasse, before: 48, after: 12.",
+      " (≤ 0,1 mm fukt, 24 t uten regn etter). Legg til eller endre dem i YAML med tasks: — f.eks. - name: Beise terrasse, max_wet: 0.05, after: 12.",
     noteFetch:
       "Kortet henter Open-Meteo direkte fra nettleseren — ingen sensorer eller hjelpere trengs. Sted er som standard hjemmet ditt.",
   },
