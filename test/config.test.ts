@@ -6,11 +6,11 @@ const wash = (extra: object = {}) =>
   resolve({ type: "custom:outdoor-work-card", mode: "carwash", ...extra }, hass);
 
 test("carwash defaults: 0.2 mm wets roads, 3 h to dry, no parked window; night_max is ignored", () => {
-  const r = wash({ night_max: 1 });
+  const r = wash();
   expect(r.okRain).toBe(0.2);
   expect(r.dryRoadsHours).toBe(3);
   expect(r.parked).toBeNull();
-  expect(r).not.toHaveProperty("nightMax");
+  expect(wash({ night_max: 1 })).toEqual(r);
 });
 
 test("work tasks: defaults are Mow ≤ 0.3 mm and Paint ≤ 0.1 mm + 24 h after; old `before` falls back to 0.3", () => {

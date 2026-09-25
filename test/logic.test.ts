@@ -98,6 +98,29 @@ test("work: a 0.3 mm shower at 13:00 on a sunny day dries off for mowing by 18:0
   expect(wed.dryAt).toEqual([wed.start, wed.start]);
 });
 
+test("work: right after the shower the ground is still too wet for Paint, dry an hour later", () => {
+  // Thursday window opening at 14:00; no evaporation while it rains.
+  const rainingHour = at("2026-09-17T13:00");
+  const et0 = (t: number) => (t === rainingHour ? 0 : diurnal(t));
+  const r = planWork(series([["2026-09-17T13:00", 0.3]], { et0 }), NOW, {
+    ...WORK,
+    weekdayStart: 14 * 60,
+  });
+  const thu = r.days[1];
+  expect(thu.wetAtStart).toBeCloseTo(0.3);
+  expect(thu.ok).toEqual([true, false]);
+  expect(thu.dryAt).toEqual([at("2026-09-17T14:00"), at("2026-09-17T15:00")]);
+});
+
+test("work: 10 mm the day before is still too wet at 18:00 and dries on a later day", () => {
+  const r = planWork(series([["2026-09-15T08:00", 10]]), NOW, WORK);
+  const wed = r.days[0];
+  expect(wed.wetAtStart).toBeGreaterThan(0.3);
+  expect(wed.ok).toEqual([false, false]);
+  expect(wed.dryAt[0]).not.toBeNull();
+  expect(wed.dryAt[0]!).toBeGreaterThanOrEqual(at("2026-09-17T00:00"));
+});
+
 test("work: 10 mm on a grey morning is still soaked at 18:00 and never dries in the forecast", () => {
   const grey = () => 0.02; // ~0.5 mm/day: nowhere near drying 10 mm within the 9-day series
   const r = planWork(series([["2026-09-16T08:00", 10]], { et0: grey }), NOW, WORK);
@@ -164,10 +187,14 @@ test("work Dry-by cell is amber when the ground dries before the window closes",
   expect(cell).toEqual({ all: false, task: 1, at: at("2026-09-16T19:00"), soon: true });
 });
 
-test("work: wetness is capped at 15 mm", () => {
+test("work: wetness is capped at 15 mm and never goes negative", () => {
   const r = planWork(series([["2026-09-16T17:00", 40]]), NOW, WORK);
   expect(r.days[0].wetAtStart).toBe(15);
   expect(r.days[0].dryAt[0]).toBeGreaterThan(at("2026-09-22T00:00"));
+
+  // Days of evaporation with no rain leave the counter at 0, not below.
+  const dry = planWork(series([]), NOW, WORK);
+  expect(dry.days.map((d) => d.wetAtStart)).toEqual(dry.days.map(() => 0));
 });
 
 test("work: rain inside the window kills it and is flagged", () => {

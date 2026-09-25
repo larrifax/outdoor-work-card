@@ -282,8 +282,8 @@ const EN: Strings = {
   needDry: (mm) => `dry ground (≤ ${mm} mm)`,
   needDryAfter: (mm, a) => `dry ground (≤ ${mm} mm) · ${a} h no rain after`,
   noDayMeets: "No day in the outlook meets that.",
-  wetAtOpen: (mm) => `${mm} mm when the window opens`,
-  afterPart: (x) => ` · ${x} after`,
+  wetAtOpen: (mm) => `${mm} mm at window open`,
+  afterPart: (x) => ` · ${x} dry after`,
   ofLight: (dur) => ` · ${dur} of light`,
   longestPart: (full, dur) => ` · longest: ${full} (${dur})`,
   noWindowWeek: "No window this week",
@@ -309,12 +309,12 @@ const EN: Strings = {
   popWashFrom: "Wash from",
   popWetAbove: "Roads wet above",
   popDryAgain: "Dry again after",
-  popNightDry: "Night (no driving)",
+  popNightDry: "Night (no driving, half-speed drying)",
   popParked: "Parked indoors",
   popNoSalt: "Road salt is not assessed.",
-  popWetVal: (mm) => `${mm} mm in an hour`,
-  popSpan: (from, until) => `${from}–${until} · half-speed drying`,
-  popParkedVal: (from, until, days) => `${from}–${until} · ${days}`,
+  popWetVal: (mm) => `${mm} mm/h`,
+  popSpan: (from, until) => `${from}–${until}`,
+  popParkedVal: (from, until, days) => `${from}–${until} on ${days}`,
   popWeekdayWin: "Weekday window",
   popWeekendWin: "Weekend window",
   popIgnoreUnder: "Ignore windows under",
@@ -322,10 +322,10 @@ const EN: Strings = {
   popHours: (h) => `${h} h without rain`,
   popMinutes: (m) => `${m} min`,
   popAboveRate: (mm) => `above ${mm} mm/h`,
-  popWetMax: (mm) => `≤ ${mm} mm wet`,
-  popWetMaxAfter: (mm, after) => `≤ ${mm} mm wet · ${after} h after`,
+  popWetMax: (mm) => `≤ ${mm} mm`,
+  popWetMaxAfter: (mm, after) => `≤ ${mm} mm · ${after} h after`,
   popWetness:
-    "Ground wetness: rain adds it, evaporation (sun, wind, warmth) removes it — about 1–2 mm a day in autumn, 3–5 in summer.",
+    "Ground wetness: rain adds to it, evaporation (sun, wind, warmth) removes it — about 1–2 mm a day in autumn, 3–5 in summer.",
   popSrc: (model) => `Open-Meteo · ${model}`,
 
   dash: "—",
@@ -369,7 +369,7 @@ const EN: Strings = {
     streak === 0 && !open
       ? "No upcoming dry-roads streak"
       : `${streak}+ days until you'd drive on wet roads`,
-  outDirty: "Roads wet at wash time",
+  outDirty: "Roads wet at or after wash time",
   outNextRain: (day, from, to, hours) =>
     `Roads wet while driving ${day} ${from}–${to} (${hours} h)`,
   statTotal: "Total",
@@ -388,7 +388,7 @@ const EN: Strings = {
     kind === "clear"
       ? "No rain forecast — roads stay dry."
       : kind === "dryBeforeDrive"
-        ? "Rain, but roads dry again before you drive."
+        ? "Rain, but roads are dry again before you drive."
         : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
@@ -486,12 +486,12 @@ const EN: Strings = {
       weekend_start: "Weekend window opens",
       window_end: "Window closes at",
       min_window_minutes: "Ignore windows shorter than",
-      rain_threshold: "Rain that wets the ground",
+      rain_threshold: "Rain that counts as rain",
       wash_start: "Wash time",
       ok_rain: "Wet-road threshold",
       night_from: "Night starts",
       night_until: "Night ends",
-      dry_roads_hours: "Dry again (hours)",
+      dry_roads_hours: "Dry again after (hours)",
       parked_start: "Parked from",
       parked_end: "Parked until",
       to_work_start: "Ride to work from",
@@ -507,13 +507,14 @@ const EN: Strings = {
       parked_days: "Parked on",
     },
     helpers: {
-      rain_threshold: 'Anything above this counts as rain for "dry before / dry after".',
-      ok_rain: "Rain per hour makes roads wet",
+      rain_threshold:
+        'Rain above this inside the window rules it out, and ends the "dry after" runway. Ground wetness counts all rain.',
+      ok_rain: "Rain per hour that makes roads wet",
       parked_start: "Optional: hours your car is parked indoors on workdays",
       min_window_minutes: "Evenings with less daylight than this are shown but never recommended.",
       model: "MET Nordic is the same model behind Yr; it only covers the Nordics.",
       accent: "Leave blank for the mode default (green for work, blue for car wash).",
-      dry_roads_hours: "Rain-free hours until roads dry (half speed at night)",
+      dry_roads_hours: "Rain-free hours until roads are dry (half speed at night)",
       rain_ok: 'Above this an hour is "bad". Between fine and this it is "tolerable".',
       wind_ok:
         'Effective wind at 10 m (mean, or more with strong gusts). Above this an hour is "bad".',
@@ -545,7 +546,7 @@ const NB: Strings = {
   needDryAfter: (mm, a) => `tørr bakke (≤ ${mm} mm) · ${a} t uten regn etter`,
   noDayMeets: "Ingen dag i varselet klarer det.",
   wetAtOpen: (mm) => `${mm} mm når vinduet åpner`,
-  afterPart: (x) => ` · ${x} etter`,
+  afterPart: (x) => ` · ${x} tørt etter`,
   ofLight: (dur) => ` · ${dur} med lys`,
   longestPart: (full, dur) => ` · lengst: ${full} (${dur})`,
   noWindowWeek: "Ingen vindu denne uka",
@@ -571,12 +572,12 @@ const NB: Strings = {
   popWashFrom: "Vask fra",
   popWetAbove: "Våte veier over",
   popDryAgain: "Tørre igjen etter",
-  popNightDry: "Natt (ingen kjøring)",
+  popNightDry: "Natt (ingen kjøring, halv tørkefart)",
   popParked: "Parkert innendørs",
   popNoSalt: "Veisalt vurderes ikke.",
-  popWetVal: (mm) => `${mm} mm i timen`,
-  popSpan: (from, until) => `${from}–${until} · tørker halvt så fort`,
-  popParkedVal: (from, until, days) => `${from}–${until} · ${days}`,
+  popWetVal: (mm) => `${mm} mm/t`,
+  popSpan: (from, until) => `${from}–${until}`,
+  popParkedVal: (from, until, days) => `${from}–${until} på ${days}`,
   popWeekdayWin: "Hverdagsvindu",
   popWeekendWin: "Helgevindu",
   popIgnoreUnder: "Ignorer vinduer under",
@@ -584,8 +585,8 @@ const NB: Strings = {
   popHours: (h) => `${h} t uten regn`,
   popMinutes: (m) => `${m} min`,
   popAboveRate: (mm) => `over ${mm} mm/t`,
-  popWetMax: (mm) => `≤ ${mm} mm fukt`,
-  popWetMaxAfter: (mm, after) => `≤ ${mm} mm fukt · ${after} t etter`,
+  popWetMax: (mm) => `≤ ${mm} mm`,
+  popWetMaxAfter: (mm, after) => `≤ ${mm} mm · ${after} t etter`,
   popWetness:
     "Fukt i bakken: regn legger til, fordampning (sol, vind, varme) trekker fra — rundt 1–2 mm i døgnet om høsten, 3–5 om sommeren.",
   popSrc: (model) => `Open-Meteo · ${model}`,
@@ -631,7 +632,7 @@ const NB: Strings = {
     streak === 0 && !open
       ? "Ingen kommende periode med tørre veier"
       : `${streak}+ dager til du kjører på våte veier`,
-  outDirty: "Våte veier ved vasketid",
+  outDirty: "Våte veier ved eller etter vasketid",
   outNextRain: (day, from, to, hours) =>
     `Våte veier mens du kjører ${day} ${from}–${to} (${hours} t)`,
   statTotal: "Totalt",
@@ -748,12 +749,12 @@ const NB: Strings = {
       weekend_start: "Helgevindu åpner",
       window_end: "Vindu lukkes",
       min_window_minutes: "Ignorer vinduer kortere enn",
-      rain_threshold: "Regn som gjør bakken våt",
+      rain_threshold: "Regn som teller som regn",
       wash_start: "Vasketidspunkt",
       ok_rain: "Terskel for våte veier",
       night_from: "Natt starter",
       night_until: "Natt slutter",
-      dry_roads_hours: "Tørre igjen (timer)",
+      dry_roads_hours: "Tørre igjen etter (timer)",
       parked_start: "Parkert fra",
       parked_end: "Parkert til",
       to_work_start: "Sykler til jobb fra",
@@ -769,7 +770,8 @@ const NB: Strings = {
       parked_days: "Parkert på",
     },
     helpers: {
-      rain_threshold: 'Alt over dette teller som regn for "tørt før / tørt etter".',
+      rain_threshold:
+        'Regn over dette i vinduet utelukker det, og avslutter "tørt etter". Fukt i bakken teller alt regn.',
       ok_rain: "Regn per time som gjør veiene våte",
       parked_start: "Valgfritt: timer bilen står parkert innendørs på arbeidsdager",
       min_window_minutes: "Kvelder med mindre dagslys enn dette vises, men anbefales aldri.",

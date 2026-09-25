@@ -146,7 +146,7 @@ for (const theme of ["dark", "light"] as const) {
     expect(washPop, "carwash popover open").toBeTruthy();
     const washVals = [...washPop.querySelectorAll(".grid .v")].map((v) => v.textContent?.trim());
     expect(
-      washVals.some((v) => v?.includes("0.2 mm in an hour")),
+      washVals.some((v) => v?.includes("0.2 mm/h")),
       "ok_rain in popover",
     ).toBe(true);
     expect(washPop.querySelector(".note")?.textContent).toContain("Road salt");
