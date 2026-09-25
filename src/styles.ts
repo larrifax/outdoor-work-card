@@ -145,6 +145,12 @@ export const styles = css`
   .pop .grid .v .mono {
     font-family: var(--owc-mono);
   }
+  .pop .note {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--owc-text-2);
+  }
   .pop .src {
     margin-top: 10px;
     padding-top: 9px;
@@ -422,8 +428,15 @@ export const styles = css`
     border-radius: 3px;
     min-width: 4px;
   }
-  .bar.before {
-    border-radius: 4px 2px 2px 4px;
+  /* Dry-by: text only, same height as a bar + number cell. */
+  .cell.dryby {
+    min-height: 23px;
+    justify-content: flex-end;
+    white-space: nowrap;
+    outline: none;
+  }
+  .cell.dryby .tip {
+    text-align: left;
   }
   .bar.after {
     border-radius: 2px 4px 4px 2px;
@@ -530,8 +543,7 @@ export const styles = css`
   .ic.sun {
     color: var(--owc-accent-text);
   }
-  .ic.moon,
-  .ic.drop {
+  .ic.moon {
     color: color-mix(in srgb, var(--owc-accent) 60%, var(--owc-text-2));
   }
   .ic.rain {

@@ -5,8 +5,8 @@ import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
 export function defaultTasks(t: ReturnType<typeof strings>): TaskConfig[] {
   return [
-    { name: t.taskMow, before: 24 },
-    { name: t.taskPaint, before: 24, after: 24 },
+    { name: t.taskMow, max_wet: 0.3 },
+    { name: t.taskPaint, max_wet: 0.1, after: 24 },
   ];
 }
 
@@ -33,10 +33,11 @@ export interface Resolved {
   // wash
   washStart: number;
   okRain: number;
-  nightMax: number;
+  dryRoadsHours: number;
   nightFrom: number;
   nightUntil: number;
-  leadHours: number;
+  /** Parked-indoors window on workdays, null when not configured. */
+  parked: [number, number] | null;
   // commute
   toWork: [number, number];
   home: [number, number];
@@ -58,6 +59,15 @@ export const fmt = (m: number): string =>
 const num = (v: unknown, d: number, min = -Infinity, max = Infinity) => {
   const n = typeof v === "string" ? parseFloat(v) : (v as number);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d;
+};
+
+const HM = /^\d{1,2}:\d{2}(:\d{2})?$/;
+/** Both ends must be valid "HH:MM" and differ, else no parked window. */
+const parkedWindow = (a: unknown, b: unknown): [number, number] | null => {
+  if (typeof a !== "string" || typeof b !== "string" || !HM.test(a) || !HM.test(b)) return null;
+  const s = parseHM(a, "00:00");
+  const e = parseHM(b, "00:00");
+  return s === e ? null : [s, e];
 };
 
 export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
@@ -101,7 +111,8 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     Array.isArray(c.tasks) && c.tasks.length
       ? c.tasks.slice(0, 4).map((tc, i) => ({
           name: String(tc?.name ?? `Task ${i + 1}`).slice(0, 12),
-          before: num(tc?.before, 24, 0, 168),
+          // Pre-2.0 `before` (hours) is ignored.
+          max_wet: num(tc?.max_wet, 0.3, 0, 5),
           after:
             tc?.after === undefined || tc?.after === null ? undefined : num(tc.after, 24, 0, 168),
         }))
@@ -143,11 +154,11 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     rainThreshold: num(c.rain_threshold, 0.2, 0, 10),
     tasks,
     washStart: parseHM(c.wash_start, "18:00"),
-    okRain: num(c.ok_rain, 0.5, 0, 20),
-    nightMax: num(c.night_max, 4, 0, 50),
+    okRain: num(c.ok_rain, 0.2, 0, 5),
+    dryRoadsHours: num(c.dry_roads_hours, 3, 0, 24),
     nightFrom: parseHM(c.night_from, "22:00"),
     nightUntil: parseHM(c.night_until, "06:00"),
-    leadHours: num(c.dry_roads_hours, 2, 0, 24),
+    parked: parkedWindow(c.parked_start, c.parked_end),
     toWork,
     home,
     midday,

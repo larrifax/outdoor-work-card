@@ -90,8 +90,10 @@ export interface WorkDay extends DayBase {
   /** Usable hours of light. 0 when passed / none. */
   hours: number;
   passed: boolean;
-  /** Dry hours before the window opens (capped). */
-  before: number;
+  /** Ground wetness (mm) at the (effective) window start. */
+  wetAtStart: number;
+  /** Per task: first hour boundary from window start when wetness ≤ its limit; null if never in data. */
+  dryAt: (number | null)[];
   /** Dry hours after the window closes (capped). */
   after: number;
   /** True when it rains inside the window. */
@@ -113,13 +115,15 @@ export interface WorkResult {
   tonightOk: number[];
 }
 
-function lastRainBefore(hours: HourPoint[], t: number, thr: number): HourPoint | null {
-  for (let i = hours.length - 1; i >= 0; i--) {
-    const h = hours[i]!;
-    if (h.t >= t) continue;
-    if (h.mm > thr) return h;
-  }
-  return null;
+/** ponytail: ET0 is for short grass, not wood or soil. Upgrade to a per-task factor if users ask. */
+const DRYING_FACTOR = 1.0;
+/** ponytail: wetness cap so a soaking doesn't take weeks to dry off in the model. */
+const WET_CAP = 15;
+
+/** Ground wetness (mm) at the end of each hour: rain adds, evaporation removes. */
+function wetness(hours: HourPoint[]): number[] {
+  let w = 0;
+  return hours.map((h) => (w = Math.min(WET_CAP, Math.max(0, w + h.mm - h.et0 * DRYING_FACTOR))));
 }
 
 function firstRainAfter(hours: HourPoint[], t: number, thr: number): HourPoint | null {
@@ -141,8 +145,23 @@ function rainWithin(hours: HourPoint[], a: number, b: number, thr: number): bool
 
 export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkResult {
   const base = buildDays(now, o.tz, o.days, o.names);
-  const first = hours[0]?.t ?? now;
   const last = hours.length ? hours[hours.length - 1]!.t + H : now;
+  const wet = wetness(hours);
+  /** Wetness at `t`: the counter after the last full hour ending at or before `t`. */
+  const wetAt = (t: number) => {
+    let w = 0;
+    for (let i = 0; i < hours.length && hours[i]!.t + H <= t; i++) w = wet[i]!;
+    return w;
+  };
+  /** First hour boundary ≥ `t` where wetness ≤ `max` (or `t` itself); null if never in data. */
+  const dryFrom = (t: number, max: number): number | null => {
+    if (wetAt(t) <= max) return t;
+    for (let i = 0; i < hours.length; i++) {
+      const end = hours[i]!.t + H;
+      if (end > t && wet[i]! <= max) return end;
+    }
+    return null;
+  };
 
   const days: WorkDay[] = base.map((b) => {
     const p = localParts(b.dayStart + 12 * H, o.tz);
@@ -162,10 +181,10 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
     const passed = hasWindow && effStart !== null && effStart >= (end as number);
     const hrs = hasWindow && !passed ? hoursBetween(effStart as number, end as number) : 0;
 
-    // Runway before: time since the last rainy hour ended, capped.
-    const lr = lastRainBefore(hours, start, o.rainThreshold);
-    const beforeRaw = lr ? hoursBetween(lr.t + H, start) : hoursBetween(first, start);
-    const before = Math.max(0, Math.min(o.cap, beforeRaw));
+    // Ground wetness when the window opens (today: from now).
+    const wetRef = effStart ?? start;
+    const wetAtStart = wetAt(wetRef);
+    const dryAt = o.tasks.map((t) => dryFrom(wetRef, t.max_wet));
 
     // Runway after: time until the next rainy hour starts, capped.
     const endRef = hasWindow ? (end as number) : start;
@@ -180,7 +199,7 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
 
     const usable = hasWindow && !passed && hrs * 60 >= o.minWindowMinutes && !during;
     const ok = o.tasks.map(
-      (t) => usable && before >= t.before && (t.after === undefined || after >= t.after),
+      (t) => usable && wetAtStart <= t.max_wet && (t.after === undefined || after >= t.after),
     );
 
     return {
@@ -190,7 +209,8 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
       effStart,
       hours: hrs,
       passed,
-      before,
+      wetAtStart,
+      dryAt,
       after,
       during,
       ok,
@@ -212,166 +232,214 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
   return { days, tasks, tonightOk };
 }
 
+export type DryByCell =
+  | { all: true }
+  /** `task` = index of the strictest not-yet-dry task; `soon` = dries before the window closes. */
+  | { all: false; task: number; at: number | null; soon: boolean };
+
+/** What the Dry-by column shows: ✓, or the strictest (lowest max_wet) task still waiting. */
+export function dryByCell(d: WorkDay, tasks: TaskConfig[]): DryByCell {
+  let pick = -1;
+  tasks.forEach((t, k) => {
+    if (d.wetAtStart <= t.max_wet) return;
+    if (pick < 0 || t.max_wet < tasks[pick]!.max_wet) pick = k;
+  });
+  if (pick < 0) return { all: true };
+  const at = d.dryAt[pick] ?? null;
+  return { all: false, task: pick, at, soon: at !== null && d.end !== null && at < d.end };
+}
+
 // ---------------------------------------------------------------------------
 // CAR WASH MODE
 // ---------------------------------------------------------------------------
+//
+// Wet-roads model: a garaged car gets dirty from spray while driving on wet
+// roads, not from rain on the parked car. An hour above `okRain` wets the
+// roads; they dry after `dryRoadsHours` rain-free hours (half speed at night).
+
+/** ponytail: fixed night drying factor. Ceiling: ignores temperature/wind; upgrade to an ET0- or temperature-aware rate if users ask. */
+const NIGHT_DRYING = 0.5;
 
 export interface WashOptions {
   tz: string;
   /** minutes after midnight */
   washStart: number;
+  /** mm in an hour above which roads turn wet. */
   okRain: number;
-  nightMax: number;
+  /** Rain-free hours until wet roads are dry again (half speed at night). */
+  dryRoadsHours: number;
+  /** Night window: nobody drives, roads dry at half speed. */
   nightFrom: number;
   nightUntil: number;
+  /** Optional [start, end) minutes when the car is parked indoors on workdays. */
+  parked: [number, number] | null;
+  /** ISO weekdays (1 = Mon … 7 = Sun) the parked window applies to. */
+  workdays: number[];
   days: number;
-  /** Hours before wash time that must be free of intolerable rain (roads dry). */
-  leadHours: number;
   /** Localized weekday names. */
   names?: Names;
 }
 
-export type WashIcon = "sun" | "moon" | "drop" | "rain";
+export type WashIcon = "sun" | "moon" | "rain";
 
-export interface RainEvent {
-  /** UTC instant the rain starts. */
+/** A run of consecutive driving hours on wet roads. */
+export interface DirtyStretch {
+  /** UTC instant the first wet driving hour starts. */
   at: number;
-  /** How many consecutive hours it stays above the threshold. */
+  /** UTC instant the last wet driving hour ends. */
+  end: number;
   hours: number;
-  /** Peak mm/h during the event. */
+  /** Peak / total mm of the rain hours that wet the roads for this stretch. */
   peak: number;
-  /** Total accumulated mm over the event. */
   total: number;
 }
 
 export interface WashDay extends DayBase {
-  /** Peak mm/h on this day. */
+  /** Peak mm/h on this day (display only). */
   peak: number;
-  /** When the peak fell. */
-  peakNight: boolean;
-  /** The day's disqualifying rain is all before wash time (so the evening is still washable). */
-  clearsBeforeWash: boolean;
-  /** Day is harmless to a clean car (all hours). */
-  tolerated: boolean;
-  /** Evening onward is harmless (so you can wash then). */
-  eveningTolerated: boolean;
-  /** Dry days after the wash day, assuming a dry garage overnight (-1 = can't wash). */
+  /** No driving hour on wet roads all day. */
+  clean: boolean;
+  /** No driving hour on wet roads from wash time (or now) to midnight. */
+  eveningClean: boolean;
+  /** Clean days after the wash day (-1 = can't wash this evening). */
   streak: number;
   /** Streak ran to the end of the data — it's at least this long. */
   openEnded: boolean;
-  /** The next disqualifying rain after the wash evening (null if none within range). */
-  nextRain: RainEvent | null;
+  /** The first dirty stretch after the wash evening (null if none within range). */
+  nextRain: DirtyStretch | null;
+  /** First driving hour on wet roads this day (UTC ms), null if none. */
+  wetFrom: number | null;
+  /** When the roads dry after the day's last wet hour (UTC ms), null if never wet or never dry in data. */
+  dryAt: number | null;
   icon: WashIcon;
 }
 
 export interface WashResult {
   days: WashDay[];
   bestIdx: number;
-  /** Index of the day whose rain ends a wash-today streak, -1 if none. */
+  /** Index of the day whose wet roads end a wash-today streak, -1 if none. */
   todayBreakIdx: number;
-  /** Index of the day whose rain ends the recommended evening's streak, -1 if open-ended. */
+  /** Index of the day whose wet roads end the recommended evening's streak, -1 if open-ended. */
   bestBreakIdx: number;
 }
+
+const inRange = (m: number, from: number, until: number) =>
+  from > until ? m >= from || m < until : m >= from && m < until;
 
 export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
   // Evaluate a few days beyond the displayed range so streaks can run past it.
   const extra = 3;
   const base = buildDays(now, o.tz, o.days + extra, o.names);
 
-  const isNight = (ms: number) => {
-    const p = localParts(ms, o.tz);
+  // Per-hour road state; the hour before the data starts counts as dry.
+  const wet: boolean[] = [];
+  const driving: boolean[] = [];
+  let drying = 0;
+  for (const h of hours) {
+    const p = localParts(h.t, o.tz);
     const m = p.h * 60 + p.mi;
-    return o.nightFrom > o.nightUntil
-      ? m >= o.nightFrom || m < o.nightUntil
-      : m >= o.nightFrom && m < o.nightUntil;
-  };
-  const bad = (h: HourPoint) => (isNight(h.t) ? h.mm > o.nightMax : h.mm > o.okRain);
+    const night = inRange(m, o.nightFrom, o.nightUntil);
+    const iso = p.wd === 0 ? 7 : p.wd;
+    const parked =
+      o.parked !== null && o.workdays.includes(iso) && inRange(m, o.parked[0], o.parked[1]);
+    driving.push(!night && !parked);
+    if (h.mm > o.okRain) {
+      drying = o.dryRoadsHours;
+      wet.push(true);
+    } else {
+      if (drying > 0) drying -= night ? NIGHT_DRYING : 1;
+      wet.push(drying > 0);
+    }
+  }
+  const dirtyAt = (i: number) => wet[i]! && driving[i]!;
 
   type Info = {
-    tolerated: boolean;
-    eveningTolerated: boolean;
+    clean: boolean;
+    eveningClean: boolean;
     peak: number;
-    peakNight: boolean;
     hasData: boolean;
     evening: number;
+    wetFrom: number | null;
+    dryAt: number | null;
   };
   const info: Info[] = base.map((b) => {
     const dayEnd = b.dayStart + 24 * H;
     const p = localParts(b.dayStart + 12 * H, o.tz);
     const washAt = zonedToUtc(p.y, p.m, p.d, Math.floor(o.washStart / 60), o.washStart % 60, o.tz);
     const evening = Math.max(washAt, b.isToday ? now : washAt);
-    let tolerated = true;
-    let eveningTolerated = true;
+    let clean = true;
+    let eveningClean = true;
     let peak = 0;
-    let peakNight = false;
     let hasData = false;
-    for (const h of hours) {
-      if (h.t + H <= b.dayStart) continue;
-      if (h.t >= dayEnd) break;
+    let wetFrom: number | null = null;
+    let lastWet = -1;
+    hours.forEach((h, i) => {
+      if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
       hasData = true;
-      if (h.mm > peak) {
-        peak = h.mm;
-        peakNight = isNight(h.t);
-      }
-      if (bad(h)) {
-        tolerated = false;
-        // Rain during or shortly before the wash (wet roads) rules the evening out.
-        if (h.t + H > evening - o.leadHours * H) eveningTolerated = false;
-      }
+      peak = Math.max(peak, h.mm);
+      if (wet[i]) lastWet = i;
+      if (!dirtyAt(i)) return;
+      clean = false;
+      wetFrom ??= h.t;
+      if (h.t + H > evening) eveningClean = false;
+    });
+    let dryAt: number | null = null;
+    if (lastWet >= 0) {
+      const j = wet.indexOf(false, lastWet);
+      dryAt = j >= 0 ? hours[j]!.t : null;
     }
-    if (!hasData) tolerated = eveningTolerated = false;
-    return { tolerated, eveningTolerated, peak, peakNight, hasData, evening };
+    if (!hasData) clean = eveningClean = false;
+    return { clean, eveningClean, peak, hasData, evening, wetFrom, dryAt };
   });
 
   const streakFrom = (s: number): { n: number; open: boolean } => {
     // Wash day itself isn't counted — the car is dry in the garage overnight.
-    if (!info[s]!.eveningTolerated) return { n: -1, open: false };
+    if (!info[s]!.eveningClean) return { n: -1, open: false };
     let n = 0;
     for (let j = s + 1; j < info.length; j++) {
       if (!info[j]!.hasData) return { n, open: true };
-      if (!info[j]!.tolerated) return { n, open: false };
+      if (!info[j]!.clean) return { n, open: false };
       n++;
     }
-    // Ran past the evaluated days without hitting rain: it's *at least* n.
+    // Ran past the evaluated days without hitting wet roads: it's *at least* n.
     return { n, open: true };
   };
 
-  // The next disqualifying rain after the wash evening (null when the evening
-  // itself is spoiled or nothing rains within the data).
-  const nextRainFrom = (s: number): RainEvent | null => {
+  const nextDirtyFrom = (s: number): DirtyStretch | null => {
     const inf = info[s]!;
-    if (!inf.eveningTolerated) return null;
-    const start = hours.findIndex((h) => h.t >= inf.evening && bad(h));
+    if (!inf.eveningClean) return null;
+    const start = hours.findIndex((h, i) => h.t >= inf.evening && dirtyAt(i));
     if (start < 0) return null;
     let end = start;
+    while (end + 1 < hours.length && dirtyAt(end + 1)) end++;
+    // Count every rain hour of the wet spell, back to where it began.
+    let from = start;
+    while (from > 0 && wet[from - 1]) from--;
     let peak = 0;
     let total = 0;
-    while (end < hours.length && bad(hours[end]!)) {
-      peak = Math.max(peak, hours[end]!.mm);
-      total += hours[end]!.mm;
-      end++;
+    for (let i = from; i <= end; i++) {
+      const mm = hours[i]!.mm;
+      if (mm <= o.okRain) continue;
+      peak = Math.max(peak, mm);
+      total += mm;
     }
-    return { at: hours[start]!.t, hours: end - start, peak, total };
+    return { at: hours[start]!.t, end: hours[end]!.t + H, hours: end - start + 1, peak, total };
   };
 
   const days: WashDay[] = base.slice(0, o.days).map((b, i) => {
     const inf = info[i]!;
     const st = streakFrom(i);
-    let icon: WashIcon;
-    if (inf.peak <= 0.05) icon = "sun";
-    else if (!inf.tolerated) icon = "rain";
-    else if (inf.peakNight) icon = "moon";
-    else icon = "drop";
+    const icon: WashIcon = inf.peak <= 0.05 ? "sun" : inf.clean ? "moon" : "rain";
     return {
       ...b,
       peak: inf.peak,
-      peakNight: inf.peakNight,
-      clearsBeforeWash: !inf.tolerated && inf.eveningTolerated,
-      tolerated: inf.tolerated,
-      eveningTolerated: inf.eveningTolerated,
+      clean: inf.clean,
+      eveningClean: inf.eveningClean,
       streak: st.n,
       openEnded: st.open,
-      nextRain: nextRainFrom(i),
+      nextRain: nextDirtyFrom(i),
+      wetFrom: inf.wetFrom,
+      dryAt: inf.dryAt,
       icon,
     };
   });
@@ -382,10 +450,10 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   });
 
   const t0 = streakFrom(0);
-  const breakIdx = t0.n + 1; // wash day no longer counted, so the break sits one day later
+  const breakIdx = t0.n + 1; // wash day not counted, so the break sits one day later
   const todayBreakIdx = t0.open ? -1 : breakIdx < base.length ? breakIdx : -1;
 
-  // Same, for the recommended evening: the day whose rain ends its streak.
+  // Same, for the recommended evening: the day whose wet roads end its streak.
   const tb = streakFrom(bestIdx);
   const bb = bestIdx + tb.n + 1;
   const bestBreakIdx = tb.open ? -1 : bb < base.length ? bb : -1;

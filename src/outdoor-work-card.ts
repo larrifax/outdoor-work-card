@@ -9,6 +9,7 @@ import { getWeather } from "./weather";
 import {
   planWork,
   planWash,
+  dryByCell,
   type WorkResult,
   type WashResult,
   type WorkDay,
@@ -26,11 +27,11 @@ import {
 } from "./commute";
 import { hm, durLabel, hLabel, localParts } from "./time";
 import { icons, taskIcon } from "./icons";
-import { strings, type Strings, type Seg } from "./i18n";
+import { strings, type Strings, type Seg, type WashKind } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
 
-const VERSION = "0.1.0";
+const VERSION = "2.0.0";
 const CAP = 48;
 
 declare global {
@@ -159,7 +160,7 @@ export class OutdoorWorkCard extends LitElement {
       lat: r.lat,
       lon: r.lon,
       model: r.model,
-      pastDays: 3,
+      pastDays: 7, // warm-up for the ground-wetness counter
       forecastDays,
       maxAgeMs: force ? 0 : r.refreshMs,
     })
@@ -272,17 +273,26 @@ export class OutdoorWorkCard extends LitElement {
 
     let head: string;
     let rows: TemplateResult[];
+    let note: string | undefined;
     if (r.mode === "carwash") {
       head = t.popHeadWash;
       rows = [
         this._ruleRow(t.popWashFrom, mono(fmt(r.washStart))),
-        this._ruleRow(t.popHarmlessDay, mono(t.popUpTo(r.okRain))),
-        this._ruleRow(
-          t.popHarmlessNight,
-          mono(t.popNightVal(r.nightMax, fmt(r.nightFrom), fmt(r.nightUntil))),
-        ),
-        this._ruleRow(t.popRoadsDry, mono(t.popHours(r.leadHours))),
+        this._ruleRow(t.popWetAbove, mono(t.popWetVal(r.okRain))),
+        this._ruleRow(t.popDryAgain, mono(t.popHours(r.dryRoadsHours))),
+        this._ruleRow(t.popNightDry, mono(t.popSpan(fmt(r.nightFrom), fmt(r.nightUntil)))),
       ];
+      if (r.parked) {
+        // ISO 1 = Mon … 7 = Sun → names index 0 = Sun.
+        const days = r.workdays.map((d) => r.names.short[d % 7]).join(" ");
+        rows.push(
+          this._ruleRow(
+            t.popParked,
+            mono(t.popParkedVal(fmt(r.parked[0]), fmt(r.parked[1]), days)),
+          ),
+        );
+      }
+      note = t.popNoSalt;
     } else {
       head = t.popHeadWork;
       const end =
@@ -300,16 +310,18 @@ export class OutdoorWorkCard extends LitElement {
           this._ruleRow(
             task.name,
             task.after === undefined
-              ? mono(t.popDryBefore(task.before))
-              : mono(t.popDryBeforeAfter(task.before, task.after)),
+              ? mono(t.popWetMax(task.max_wet))
+              : mono(t.popWetMaxAfter(task.max_wet, task.after)),
           ),
         ),
       ];
+      note = t.popWetness;
     }
 
     return html`
       <div class="h">${head}</div>
       <div class="grid">${rows}</div>
+      ${note ? html`<div class="note">${note}</div>` : nothing}
       <div class="src">${t.popSrc(model)}</div>
     `;
   }
@@ -575,12 +587,12 @@ export class OutdoorWorkCard extends LitElement {
           const ld = v.longestIdx >= 0 ? res.days[v.longestIdx] : undefined;
           const need =
             task.after === undefined
-              ? t.needBefore(task.before)
-              : t.needBeforeAfter(task.before, task.after);
+              ? t.needDry(task.max_wet)
+              : t.needDryAfter(task.max_wet, task.after);
           let detail: string;
           if (!nd) detail = t.noDayMeets;
           else {
-            detail = t.dryBeforehand(hLabel(nd.before, CAP, t.hUnit));
+            detail = t.wetAtOpen(nd.wetAtStart.toFixed(1));
             if (task.after !== undefined) detail += t.afterPart(hLabel(nd.after, CAP, t.hUnit));
             detail += t.ofLight(durLabel(nd.hours, t.hUnit));
             if (ld && ld !== nd) detail += t.longestPart(ld.full, durLabel(ld.hours, t.hUnit));
@@ -597,14 +609,21 @@ export class OutdoorWorkCard extends LitElement {
       </div>
 
       <div class="grid cols">
-        <span>${t.colDay}</span><span class="ra">${t.colBefore}</span><span>${t.colWindow}</span
+        <span>${t.colDay}</span><span class="ra">${t.colDryBy}</span><span>${t.colWindow}</span
         ><span>${t.colAfter}</span><span class="ra">${t.colGood}</span>
       </div>
-      <div class="rows">${res.days.map((d) => this._workRow(d, r, t))}</div>
+      <div class="rows">${res.days.map((d, i) => this._workRow(d, i, r, t))}</div>
     `;
   }
 
-  private _workRow(d: WorkDay, r: Resolved, t: Strings): TemplateResult {
+  /** "21:00" on the window's day, "Fri 11:00" later, "—" never. */
+  private _dryTime(at: number | null, d: WorkDay, r: Resolved, t: Strings): string {
+    if (at === null) return t.dash;
+    const p = localParts(at, r.tz);
+    return p.key === d.key ? hm(at, r.tz) : `${r.names.short[p.wd]} ${hm(at, r.tz)}`;
+  }
+
+  private _workRow(d: WorkDay, i: number, r: Resolved, t: Strings): TemplateResult {
     const acc = r.accent;
     const runway = (h: number, need: number) =>
       h >= need ? acc : h >= need / 2 ? "var(--owc-amber)" : "var(--owc-dim)";
@@ -614,8 +633,23 @@ export class OutdoorWorkCard extends LitElement {
         : h >= need / 2
           ? "var(--owc-amber-text)"
           : "var(--owc-text-2)";
-    // Threshold used for colouring the runway bars = the strictest configured task need.
-    const needB = Math.max(...r.tasks.map((task) => task.before));
+    const cell = dryByCell(d, r.tasks);
+    const cellTxt = cell.all
+      ? "✓"
+      : t.dryByCell(r.tasks[cell.task]!.name, this._dryTime(cell.at, d, r, t));
+    const cellColor = cell.all
+      ? "var(--owc-accent-text)"
+      : cell.soon
+        ? "var(--owc-amber-text)"
+        : "var(--owc-text-2)";
+    const ref = d.effStart ?? d.start ?? d.dayStart;
+    const tipLines = r.tasks.map((task, k) =>
+      d.wetAtStart <= task.max_wet
+        ? t.dryByOk(task.name)
+        : d.dryAt[k] == null
+          ? t.dryByNever(task.name)
+          : t.dryByLater(task.name, this._dryTime(d.dryAt[k]!, d, r, t)),
+    );
     const afters = r.tasks.map((task) => task.after).filter((x): x is number => x !== undefined);
     const needA = afters.length ? Math.max(...afters) : 0;
     const anyOk = d.ok.some(Boolean);
@@ -632,13 +666,20 @@ export class OutdoorWorkCard extends LitElement {
 
     return html` <div class="grid row ${classMap({ today: d.isToday, far: d.far })}">
       <div class="cell l"><span class="dn">${d.short}</span><span class="dd">${d.dom}</span></div>
-      <div class="cell r">
-        <div
-          class="bar before"
-          style=${styleMap({ width: pct(d.before, CAP), background: runway(d.before, needB) })}
-        ></div>
-        <span class="num" style=${styleMap({ color: runwayTxt(d.before, needB) })}
-          >${hLabel(d.before, CAP, t.hUnit)}</span
+      <div
+        class="cell r dryby"
+        tabindex="0"
+        style=${styleMap({ "anchor-name": `--owc-dry-${i}` })}
+        @pointerenter=${this._showTip}
+        @pointerleave=${this._hideTip}
+        @focus=${this._showTip}
+        @blur=${this._hideTip}
+      >
+        <span class="num" style=${styleMap({ color: cellColor })}>${cellTxt}</span>
+        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-dry-${i}` })}
+          >${t.dryByHead(d.wetAtStart.toFixed(1), hm(ref, r.tz))}${tipLines.map(
+            (l) => html`<br />${l}`,
+          )}</span
         >
       </div>
       <div class="cell l">
@@ -673,11 +714,12 @@ export class OutdoorWorkCard extends LitElement {
       tz: r.tz,
       washStart: r.washStart,
       okRain: r.okRain,
-      nightMax: r.nightMax,
+      dryRoadsHours: r.dryRoadsHours,
       nightFrom: r.nightFrom,
       nightUntil: r.nightUntil,
+      parked: r.parked,
+      workdays: r.workdays,
       days: r.days,
-      leadHours: r.leadHours,
       names: r.names,
     });
     const best = res.days[res.bestIdx]!;
@@ -691,7 +733,9 @@ export class OutdoorWorkCard extends LitElement {
     const washStart = fmt(r.washStart);
     const waitDays = res.bestIdx; // 0 = tonight
     const gain = best.streak - today.streak; // may be <= 0 only through open-ended rounding
-    const describe = (d: WashDay) => t.describe(d.full, d.peakNight, d.peak.toFixed(1));
+    // A break day is always dirty, so `wetFrom` is set; "—" guards the type.
+    const describe = (d: WashDay) =>
+      t.describe(d.full, d.wetFrom === null ? t.dash : hm(d.wetFrom, r.tz));
     const dayAt = (i: number) => (i >= 0 && i < res.days.length ? res.days[i] : undefined);
     const todayBreak = dayAt(res.todayBreakIdx);
     const bestBreak = dayAt(res.bestBreakIdx);
@@ -722,7 +766,7 @@ export class OutdoorWorkCard extends LitElement {
         ? t.whyOkBreak(washStart, describe(todayBreak))
         : t.whyOkNoRain(washStart);
     } else if (none) {
-      contextLine = t.whyNone(r.okRain);
+      contextLine = t.whyNone;
     } else {
       contextLine =
         t.ctxSkipFrom(washStart, waitDays) +
@@ -794,14 +838,11 @@ export class OutdoorWorkCard extends LitElement {
   private _washCol(d: WashDay, isBest: boolean, t: Strings, i: number): TemplateResult {
     const tag = d.isToday && isBest ? t.tagTonight : isBest ? t.tagBest : d.isToday ? t.tagNow : "";
     const mm = d.peak <= 0.05 ? t.dry : t.mm(d.peak.toFixed(1));
-    const kind =
-      d.peak <= 0.05 ? "clear" : d.clearsBeforeWash ? "earlier" : d.peakNight ? "night" : "daytime";
-    const when = {
-      clear: t.whenClear,
-      earlier: t.whenEarlier,
-      night: t.whenNight,
-      daytime: t.whenDaytime,
-    }[kind];
+    const kind: WashKind =
+      d.icon === "sun" ? "clear" : d.icon === "moon" ? "dryBeforeDrive" : "wetWhileDriving";
+    const when = { clear: t.whenClear, dryBeforeDrive: t.whenDry, wetWhileDriving: t.whenWet }[
+      kind
+    ];
     const out = d.streak < 0 ? t.dash : t.outDays(d.streak, d.openEnded);
     const r = this._r;
     const ev = d.nextRain;
@@ -810,7 +851,7 @@ export class OutdoorWorkCard extends LitElement {
         ? html`${t.outNextRain(
               r.names.full[localParts(ev.at, r.tz).wd]!,
               hm(ev.at, r.tz),
-              hm(ev.at + ev.hours * 3_600_000, r.tz),
+              hm(ev.end, r.tz),
               ev.hours,
             )}
             <div class="stats">
@@ -835,11 +876,11 @@ export class OutdoorWorkCard extends LitElement {
         @focus=${this._showTip}
         @blur=${this._hideTip}
       >
-        <div class="ic ${d.icon}">${icons[d.icon](d.icon === "drop" ? 16 : 20)}</div>
-        <span class="mm ${d.tolerated ? "" : "bad"}">${mm}</span>
+        <div class="ic ${d.icon}">${icons[d.icon](20)}</div>
+        <span class="mm ${d.clean ? "" : "bad"}">${mm}</span>
         <span class="when">${when}</span>
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
-          >${t.washInfo(kind, d.peak.toFixed(1))}</span
+          >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz))}</span
         >
       </div>
       <div

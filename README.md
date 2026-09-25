@@ -3,13 +3,13 @@
 A self-contained Home Assistant Lovelace card that answers two questions a homeowner in a rainy climate keeps asking:
 
 - **Outdoor work** — _When is the ground dry enough to mow, and is there a dry stretch on both sides for painting?_
-  Every day of the outlook is shown as a **dry runway → after-work window → dry runway**, with a pill per activity saying whether that evening qualifies.
+  Every day of the outlook shows **when the ground is dry → after-work window → dry runway after**, with a pill per activity saying whether that evening qualifies.
 - **Car wash** — _Which evening should I wash the car so it stays clean longest?_
-  Each evening shows how many clean days would follow, with light drizzle and overnight rain treated as harmless and heavier daytime rain ending the streak.
+  Each evening shows how many clean days would follow, ended by the first day you'd drive on wet roads.
 
 ![Dark theme](docs/preview-dark.png)
 
-No sensors, helpers, automations or template YAML to set up. The card fetches its own data from **Open-Meteo** (default model: **MET Nordic 1 km**, the same model behind Yr), including the last three days of precipitation, so it knows how long the ground has been drying **without a rain gauge**.
+No sensors, helpers, automations or template YAML to set up. The card fetches its own data from **Open-Meteo** (default model: **MET Nordic 1 km**, the same model behind Yr), including the last seven days of precipitation and evaporation, so it knows how wet the ground is **without a rain gauge**.
 
 ## Install
 
@@ -49,22 +49,23 @@ weekday_start: "18:00" # window opens Mon–Fri
 weekend_start: "10:00" # window opens Sat/Sun
 window_end: dusk # dusk | sunset | "HH:MM"
 min_window_minutes: 45 # shorter evenings are shown but never recommended
-rain_threshold: 0.2 # mm/h that counts as "rain" for the ground
+rain_threshold: 0.2 # mm/h that counts as rain inside the window and for "after"
 tasks: # optional; these are the defaults
   - name: Mow
-    before: 24 # hours of dry ground required before the window
+    max_wet: 0.3 # ground wetness limit in mm when the window opens
   - name: Paint
-    before: 24
-    after: 24 # …and hours it must stay dry afterwards
+    max_wet: 0.1
+    after: 24 # …and hours without rain after the window
 ```
 
-Up to four tasks. Only `before` is required; add `after` for anything that needs to cure. Examples: `- name: Stain deck, before: 48, after: 12` · `- name: Weed, before: 6`.
+Up to four tasks. `max_wet` defaults to 0.3 mm; add `after` for anything that needs to cure. Examples: `- name: Stain deck, max_wet: 0.05, after: 12` · `- name: Weed, max_wet: 1`.
 
 How a day is judged:
 
 - **Window** = start time → civil dusk (or sunset / fixed time), clamped to "now" for today. Rain inside the window disqualifies it (shown red).
-- **Dry before** = hours since the last hour with more than `rain_threshold` mm before the window opens. Bars turn green when a task's requirement is met, amber at half, grey below. Capped at 48 h for display.
-- **Dry after** = hours from the window closing until the next such hour.
+- **Ground wetness** (mm) is a running counter: each hour's precipitation adds to it and Open-Meteo's reference evaporation (`et0_fao_evapotranspiration`, which reflects sun, wind, warmth and humidity) removes it, capped at 15 mm. A task is OK when wetness at window start is at or below its `max_wet`.
+- **Dry by** shows ✓ when every task's ground is dry. Otherwise it names the strictest task still waiting and when it will be dry (`Paint 21:00`, `Paint Fri 11:00`, or `Paint —` if not within the forecast) — amber when that falls inside the window. Tap it for the wetness and every task's time.
+- **Dry after** = hours from the window closing until the next hour with more than `rain_threshold` mm.
 - The hero names the **next** qualifying evening per task and, if a later day offers more daylight, the **longest** one.
 
 ### Car-wash mode
@@ -73,14 +74,18 @@ How a day is judged:
 type: custom:outdoor-work-card
 mode: carwash
 wash_start: "18:00"
-ok_rain: 0.5 # mm/h harmless to a clean car in daytime
-night_max: 4 # mm/h tolerated overnight
-night_from: "22:00"
+ok_rain: 0.2 # mm in an hour above which roads turn wet
+dry_roads_hours: 3 # rain-free hours until wet roads are dry again
+night_from: "22:00" # no driving at night; roads dry at half speed
 night_until: "06:00"
-dry_roads_hours: 2 # no heavy rain this long before the wash (wet roads)
+parked_start: "08:00" # optional: car parked indoors at work…
+parked_end: "16:00"
+workdays: [1, 2, 3, 4, 5] # …on these ISO weekdays (default Mon–Fri)
 ```
 
-Each column's bottom number is the clean days you'd get by washing **that** evening. The streak from an evening counts that day and every following day whose rain stays under the thresholds; `4+` means it runs past the end of the outlook. The hero picks the longest streak (earliest on ties) and adapts to one of three states. When **tonight is the pick**, it reads "Best evening to wash → Tonight" with the clean-days count and what eventually ends the streak. When a **later evening wins**, a red "Skip today" banner says why tonight falls short, the hero recommends the better day, and a trade-off line spells out how many extra clean days waiting buys. When **no evening survives the outlook**, it shows "Outlook → nothing stays clean" and why.
+The car is assumed garaged: rain on the parked car is harmless, and what dirties it is **driving on wet roads**. Roads turn wet in any hour with more than `ok_rain` mm and dry again after `dry_roads_hours` rain-free hours (half speed during the night window). Every hour outside the night window — and outside the parked window on workdays — counts as possible driving. A day is dirty when you'd drive on wet roads at any point; a wash evening is ruled out when roads are wet at or after wash time. Road salt is not assessed.
+
+Each column's bottom number is the clean days you'd get by washing **that** evening. The streak from an evening counts every following day without driving on wet roads; `4+` means it runs past the end of the outlook. The hero picks the longest streak (earliest on ties) and adapts to one of three states. When **tonight is the pick**, it reads "Best evening to wash → Tonight" with the clean-days count and what eventually ends the streak. When a **later evening wins**, a red "Skip today" banner says why tonight falls short, the hero recommends the better day, and a trade-off line spells out how many extra clean days waiting buys. When **no evening survives the outlook**, it shows "Outlook → nothing stays clean" and why.
 
 ### Commute mode
 
@@ -140,11 +145,33 @@ Values are 10 m model winds; don't correct them to rider height. Snow and ice ar
 | `model`                 | `metno_seamless` | `best_match` outside the Nordics, or any Open-Meteo model id |
 | `accent`                | green / blue     | Any CSS colour                                               |
 
+## Release notes
+
+### v2.0.0
+
+Both planning models changed; recommendations will shift after upgrading. Old configs keep loading.
+
+**Car wash — wet-roads model.** The car is assumed garaged; what dirties it is driving on wet roads.
+
+- `ok_rain` now means mm in an hour above which roads turn wet. Default **0.5 → 0.2**.
+- `dry_roads_hours` now means rain-free hours until wet roads are dry again (half speed at night). Default **2 → 3**.
+- `night_from` / `night_until` now mark when nobody drives and roads dry at half speed.
+- `night_max` is ignored and gone from the editor.
+- New optional `parked_start` / `parked_end`: hours the car is parked indoors, on the days in `workdays` (default Mon–Fri).
+- Day icons: sun (no rain), moon (rain, but roads dry whenever you drive), rain (wet roads while driving).
+
+**Outdoor work — ground-wetness model.**
+
+- Task `before` (hours) is replaced by `max_wet` (mm of ground wetness). Old `before` values are ignored; tasks without `max_wet` get 0.3.
+- New defaults: Mow `max_wet: 0.3`, Paint `max_wet: 0.1, after: 24`.
+- The **Dry before** column is now **Dry by**: ✓, or the strictest waiting task and when it will be dry.
+- Fetches Open-Meteo's hourly `et0_fao_evapotranspiration` and 7 past days (was 3).
+
 ## Data source, honestly
 
 - **Open-Meteo** is free for non-commercial use, needs no key, and allows browser (CORS) requests. One request per card location per hour; all cards on a page share it.
 - `metno_seamless` = MET Nordic (1 km, Norway/Sweden/Denmark/Finland) for the first ~2.5 days, then ECMWF. Days beyond ~60 h are drawn slightly dimmer: the hour-by-hour detail there is a model blend, not the high-resolution short-range forecast.
-- **Rain history** comes from the model's archived analyses (`past_days=3`), not a gauge. For "has the lawn had a day to dry" this is good; for "did it drizzle at my house at 14:00" it is an estimate. If you have a rain gauge, that is still the better source for the _before_ side — a future option could read one.
+- **Rain history** comes from the model's archived analyses (`past_days=7`), not a gauge. For "has the lawn had a day to dry" this is good; for "did it drizzle at my house at 14:00" it is an estimate. If you have a rain gauge, that is still the better source for the _before_ side — a future option could read one.
 - Sunset and civil dusk are computed in the card for every day (standard sunrise equation, ±2–3 min).
 
 Why not call `api.met.no` directly? MET asks browser clients to identify themselves via `User-Agent`, which browsers cannot set, and recommends a proxy instead — Open-Meteo serves the same MET Nordic data with browser-friendly terms.

@@ -1,9 +1,11 @@
 export type Mode = "work" | "carwash" | "commute";
 
-/** One activity in `work` mode. `before`/`after` are hours of dry ground required. */
+/** One activity in `work` mode. */
 export interface TaskConfig {
   name: string;
-  before: number;
+  /** Ground wetness limit in mm: the task is OK when wetness at window start is at or below it. */
+  max_wet: number;
+  /** Hours without rain required after the window. */
   after?: number;
 }
 
@@ -34,24 +36,27 @@ export interface CardConfig {
   window_end?: string;
   /** Windows shorter than this are ignored (default 45). */
   min_window_minutes?: number;
-  /** mm/h that counts as "rain" for the ground (default 0.2). */
+  /** mm/h that counts as rain inside the window and for `after` (default 0.2). */
   rain_threshold?: number;
-  /** Activities to evaluate. Default: Mow (24 h before) and Paint (24 h before + 24 h after). */
+  /** Activities to evaluate. Default: Mow (≤ 0.3 mm wet) and Paint (≤ 0.1 mm wet + 24 h no rain after). */
   tasks?: TaskConfig[];
 
   // --- carwash mode ----------------------------------------------------
   /** "HH:MM" — when you'd start washing (default 18:00). */
   wash_start?: string;
-  /** mm/h that is harmless to a clean car by day (default 0.5). */
+  /** mm in an hour above which roads turn wet (default 0.2). */
   ok_rain?: number;
-  /** mm/h tolerated at night (default 4). */
+  /** @deprecated Ignored since v2.0.0 (wet-roads model). */
   night_max?: number;
-  /** Night runs from this hour… (default 22:00) */
+  /** Night (no driving, half-speed drying) runs from this hour… (default 22:00) */
   night_from?: string;
   /** …until this hour (default 06:00). */
   night_until?: string;
-  /** Hours before wash time that must be rain-free so the roads are dry (default 2). */
+  /** Rain-free hours until wet roads are dry again (default 3). */
   dry_roads_hours?: number;
+  /** Optional "HH:MM" window the car is parked indoors on `workdays`. Both must be set. */
+  parked_start?: string;
+  parked_end?: string;
 
   // --- commute mode ----------------------------------------------------
   /** "HH:MM" bounds of the ride to work (default 07:00–09:00). */
@@ -69,7 +74,7 @@ export interface CardConfig {
   /** Effective wind (m/s, see commute.ts) that is still "fine" / still "tolerable" (default 6 / 10). */
   wind_fine?: number;
   wind_ok?: number;
-  /** ISO weekdays to show, 1 = Monday … 7 = Sunday (default [1,2,3,4,5]). */
+  /** ISO weekdays, 1 = Monday … 7 = Sunday (default [1,2,3,4,5]). Commute: days shown. Carwash: days the parked window applies. */
   workdays?: number[];
 }
 
@@ -82,6 +87,8 @@ export interface HourPoint {
   wind: number;
   /** 10 m gust speed during this hour, m/s. Absent → treat as `wind`. */
   gust?: number;
+  /** FAO reference evapotranspiration during this hour, mm (0 when missing). */
+  et0: number;
   /** True when this hour is in the past (from the archive part of the response). */
   past: boolean;
 }
