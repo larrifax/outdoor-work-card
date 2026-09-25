@@ -191,6 +191,7 @@ export interface Strings {
   cSep: string;
   cDryCalm: string;
   cMiddayFlag: string;
+  cMiddayFlagSnow: string;
   cNoData: string;
   cToday: string;
   cTomorrow: string;
@@ -240,8 +241,9 @@ export interface Strings {
   popSnowLabel: string;
   popSnowLine: (ok: number, danger: number) => string;
   popIcyLine: (night: number, now: number) => string;
-  popTyresAuto: string;
-  popTyresEntity: (entity: string, winter: boolean | null) => string;
+  /** `summer` = what the weather guess says */
+  popTyresAuto: (summer: boolean) => string;
+  popTyresEntity: (entity: string, winter: boolean | null, summerGuess: boolean) => string;
   popMidday: string;
   popCommuteNote: (toA: string, toB: string, homeA: string, homeB: string) => string;
 
@@ -424,6 +426,7 @@ const EN: Strings = {
   cSep: " · ",
   cDryCalm: "dry and calm both ways",
   cMiddayFlag: " · heavy rain midday — consider home office",
+  cMiddayFlagSnow: " · heavy snow midday — consider home office",
   cNoData: "no forecast yet",
   cToday: "Today",
   cTomorrow: "Tomorrow",
@@ -472,12 +475,14 @@ const EN: Strings = {
     `Snow, cm/h: fine none · tolerable ≤ ${ok} · bad > ${ok} · dangerous > ${danger}`,
   popIcyLine: (night, now) =>
     `Snowflake badge: road may be icy on summer tyres (wet road, night ≤ +${night} °C, now ≤ +${now} °C). Doesn't change the grade.`,
-  popTyresAuto:
-    "Summer tyres assumed: no frost in the days before yesterday and no snow on the ground",
-  popTyresEntity: (entity, winter) =>
-    `Tyres from ${entity}: ${winter === null ? "unavailable, guessing from weather" : winter ? "winter" : "summer"}`,
+  popTyresAuto: (summer) =>
+    summer
+      ? "Summer tyres assumed: no frost in the days before yesterday and no snow on the ground"
+      : "Winter tyres assumed: frost in the days before yesterday or snow on the ground",
+  popTyresEntity: (entity, winter, summerGuess) =>
+    `Tyres from ${entity}: ${winter === null ? `unavailable, guessing ${summerGuess ? "summer" : "winter"}` : winter ? "winter" : "summer"}`,
   popMidday:
-    "Midday doesn't change the grade. A red outline means heavy midday rain — the forecast may be off by an hour or two.",
+    "Midday doesn't change the grade. A red outline means heavy midday rain or snow — the forecast may be off by an hour or two.",
   popCommuteNote: (toA, toB, homeA, homeB) =>
     `A commute is judged by its worst hour and the grade covers the whole day. To work ${toA}–${toB} · home ${homeA}–${homeB}.`,
 
@@ -709,6 +714,7 @@ const NB: Strings = {
   cSep: " · ",
   cDryCalm: "tørt og vindstille begge veier",
   cMiddayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
+  cMiddayFlagSnow: " · kraftig snø midt på dagen — vurder hjemmekontor",
   cNoData: "ingen prognose ennå",
   cToday: "I dag",
   cTomorrow: "I morgen",
@@ -757,11 +763,14 @@ const NB: Strings = {
     `Snø, cm/t: fint ingen · tålelig ≤ ${ok} · dårlig > ${ok} · farlig > ${danger}`,
   popIcyLine: (night, now) =>
     `Snøfnugg-merke: veien kan være glatt på sommerdekk (våt vei, natt ≤ +${night} °C, nå ≤ +${now} °C). Endrer ikke karakteren.`,
-  popTyresAuto: "Sommerdekk antatt: ingen frost dagene før i går og ingen snø på bakken",
-  popTyresEntity: (entity, winter) =>
-    `Dekk fra ${entity}: ${winter === null ? "utilgjengelig, gjetter ut fra været" : winter ? "vinter" : "sommer"}`,
+  popTyresAuto: (summer) =>
+    summer
+      ? "Sommerdekk antatt: ingen frost dagene før i går og ingen snø på bakken"
+      : "Vinterdekk antatt: frost dagene før i går eller snø på bakken",
+  popTyresEntity: (entity, winter, summerGuess) =>
+    `Dekk fra ${entity}: ${winter === null ? `utilgjengelig, gjetter ${summerGuess ? "sommer" : "vinter"}` : winter ? "vinter" : "sommer"}`,
   popMidday:
-    "Midt på dagen endrer ikke karakteren. Rød kant betyr kraftig regn midt på dagen — varselet kan bomme med en time eller to.",
+    "Midt på dagen endrer ikke karakteren. Rød kant betyr kraftig regn eller snø midt på dagen — varselet kan bomme med en time eller to.",
   popCommuteNote: (toA, toB, homeA, homeB) =>
     `En tur vurderes etter sin verste time, og karakteren gjelder hele dagen. Til jobb ${toA}–${toB} · hjem ${homeA}–${homeB}.`,
 

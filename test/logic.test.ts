@@ -373,6 +373,16 @@ test("wash: after frost on wet roads, 0.15 mm the next day wets them; without fr
   expect(plain.salted).toBe(false);
 });
 
+test("wash: heavy rain on salted roads isn't blamed on salt", () => {
+  const rain: [string, number][] = [
+    ["2026-09-17T05:00", 0.3],
+    ["2026-09-18T12:00", 2],
+  ];
+  const fri = planWash(salty(rain, ["2026-09-17T05"]), NOW, WASH).days[2];
+  expect(fri.clean).toBe(false);
+  expect(fri.salted).toBe(false);
+});
+
 test("wash: salt washes off after 10 mm of rain since the trigger", () => {
   const rain = (last: number): [string, number][] => [
     ["2026-09-17T05:00", 0.3],

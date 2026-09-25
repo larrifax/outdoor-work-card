@@ -24,7 +24,7 @@ import {
   ICY_NIGHT_MAX,
   ICY_NOW_MAX,
   SNOW_OK,
-  icyWatchFrom,
+  winterTyresFrom,
   summerTyres,
   type CommuteResult,
   type CommuteDay,
@@ -71,6 +71,10 @@ export class OutdoorWorkCard extends LitElement {
   private _lastKey = "";
   /** planCommute is Intl-heavy and hass updates re-render often: recompute only when inputs change. */
   private _commuteMemo?: { deps: unknown[]; res: CommuteResult };
+  private _tyreMemo?: {
+    deps: unknown[];
+    res: { winter: boolean | null; summer: boolean; icyWatch: boolean };
+  };
 
   // ---- HA card API --------------------------------------------------------
 
@@ -339,6 +343,7 @@ export class OutdoorWorkCard extends LitElement {
   // ---- commute popover ----------------------------------------------------
 
   private _renderCommuteRules(r: Resolved, t: Strings, model: string): TemplateResult {
+    const tyres = this._tyres(r);
     return html`
       <div class="h">${t.popCommuteTile}</div>
       <div class="grid">
@@ -380,8 +385,8 @@ export class OutdoorWorkCard extends LitElement {
         ${t.popIcyLine(ICY_NIGHT_MAX, ICY_NOW_MAX)}
         ${
           r.winterTyresEntity
-            ? t.popTyresEntity(r.winterTyresEntity, this._tyres(r).winter)
-            : t.popTyresAuto
+            ? t.popTyresEntity(r.winterTyresEntity, tyres.winter, tyres.summer)
+            : t.popTyresAuto(tyres.summer)
         }
       </div>
       <div class="h">${t.popDayGrade}</div>
@@ -403,13 +408,18 @@ export class OutdoorWorkCard extends LitElement {
 
   // ---- commute mode -------------------------------------------------------
 
-  /** Winter-tyres entity state: true/false when on/off, null when set but unusable, undefined when unset. */
-  /** `winter`: entity says on/off, null when unset or unusable (then `icyWatch` is the weather guess). */
-  private _tyres(r: Resolved): { winter: boolean | null; icyWatch: boolean } {
+  /** Tyre state: `winter` from the entity (null = unset/unusable), `summer` = weather guess. Memoized: hass pushes often. */
+  private _tyres(r: Resolved): { winter: boolean | null; summer: boolean; icyWatch: boolean } {
     const state = r.winterTyresEntity ? this.hass?.states?.[r.winterTyresEntity]?.state : undefined;
-    const winter = state === "on" ? true : state === "off" ? false : null;
-    const guess = winter === null && summerTyres(this._weather!.hours, Date.now(), r.tz);
-    return { winter, icyWatch: icyWatchFrom(state, guess) };
+    const deps = [this._weather, this._tick, r.tz, state];
+    const memo = this._tyreMemo;
+    if (memo && memo.deps.every((d, i) => d === deps[i])) return memo.res;
+    const winter = winterTyresFrom(state);
+    // No weather yet (loading / fetch failed): no guess, no badges.
+    const summer = this._weather ? summerTyres(this._weather.hours, Date.now(), r.tz) : false;
+    const res = { winter, summer, icyWatch: winter === null ? summer : !winter };
+    this._tyreMemo = { deps, res };
+    return res;
   }
 
   private _renderCommute(r: Resolved, t: Strings): TemplateResult {
@@ -449,6 +459,7 @@ export class OutdoorWorkCard extends LitElement {
         sep: t.cSep,
         dryCalm: t.cDryCalm,
         middayFlag: t.cMiddayFlag,
+        middayFlagSnow: t.cMiddayFlagSnow,
         noData: t.cNoData,
       },
     });
@@ -529,12 +540,14 @@ export class OutdoorWorkCard extends LitElement {
           ${
             d.midday.snowDom
               ? html`<span class="val"
-                    ><span class="ic${d.midday.snowLevel}">${icons.snowflake(10)}</span
+                    ><span class="ic${Math.max(d.midday.rain, d.midday.snowLevel)}"
+                      >${icons.snowflake(10)}</span
                     >${d.midday.snow.toFixed(1)}</span
                   >
                   <span class="val tot">Σ ${d.midday.snowTotal.toFixed(1)}</span>`
               : html`<span class="val"
-                    ><span class="ic${d.midday.rain}">${icons.drop(10)}</span
+                    ><span class="ic${Math.max(d.midday.rain, d.midday.snowLevel)}"
+                      >${icons.drop(10)}</span
                     >${d.midday.mm.toFixed(1)}</span
                   >
                   <span class="val tot">Σ ${d.midday.total.toFixed(1)}</span>`
@@ -568,11 +581,13 @@ export class OutdoorWorkCard extends LitElement {
                       ${
                         c.snowDom
                           ? html`<span class="val"
-                              ><span class="ic${c.snowLevel}">${icons.snowflake(10)}</span
+                              ><span class="ic${Math.max(c.rain, c.snowLevel)}"
+                                >${icons.snowflake(10)}</span
                               >${c.snow.toFixed(1)}</span
                             >`
                           : html`<span class="val"
-                              ><span class="ic${c.rain}">${icons.drop(10)}</span
+                              ><span class="ic${Math.max(c.rain, c.snowLevel)}"
+                                >${icons.drop(10)}</span
                               >${c.mm.toFixed(1)}</span
                             >`
                       }

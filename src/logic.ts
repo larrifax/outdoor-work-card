@@ -318,7 +318,7 @@ export interface WashDay extends DayBase {
   nextRain: DirtyStretch | null;
   /** First driving hour on wet roads this day (UTC ms), null if none. */
   wetFrom: number | null;
-  /** Roads were salted at `wetFrom`, so any moisture wet them. */
+  /** Roads at `wetFrom` are wet only because they were salted (moisture ≤ okRain). */
   salted: boolean;
   /** When the roads dry after the day's last wet hour (UTC ms), null if never wet or never dry in data. */
   dryAt: number | null;
@@ -347,8 +347,9 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   const driving: boolean[] = [];
   /** the hour's precipitation wet the roads (threshold depends on salt) */
   const rainy: boolean[] = [];
-  /** roads counted as salted while judging this hour */
-  const salted: boolean[] = [];
+  /** roads are wet only because salt lowered the threshold (the wetting hour was ≤ okRain) */
+  const saltWet: boolean[] = [];
+  let bySalt = false;
   let drying = 0;
   // ponytail: salt triggered before the fetched past days (7) is missed; accept, or fetch more history.
   let salt = false;
@@ -365,15 +366,16 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       washOff += h.mm;
       if (washOff >= SALT_WASH_OFF) salt = false;
     }
-    salted.push(salt);
     rainy.push(h.mm > (salt ? SALT_WET : o.okRain));
     if (rainy[rainy.length - 1]) {
       drying = o.dryRoadsHours;
+      bySalt = h.mm <= o.okRain;
       wet.push(true);
     } else {
       if (drying > 0) drying -= night ? NIGHT_DRYING : 1;
       wet.push(drying > 0);
     }
+    saltWet.push(wet[wet.length - 1]! && bySalt);
     if (h.temp != null && h.temp <= SALT_TEMP && (wet[wet.length - 1] || (h.snow ?? 0) > 0)) {
       salt = true;
       washOff = 0;
@@ -412,7 +414,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       clean = false;
       if (wetFrom === null) {
         wetFrom = h.t;
-        saltedWet = salted[i]!;
+        saltedWet = saltWet[i]!;
       }
       if (h.t + H > evening) eveningClean = false;
     });

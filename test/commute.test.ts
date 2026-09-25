@@ -4,7 +4,7 @@ import {
   matchPreset,
   PRESETS,
   summerTyres,
-  icyWatchFrom,
+  winterTyresFrom,
   type CommuteOptions,
 } from "../src/commute";
 import { resolve } from "../src/config";
@@ -280,6 +280,7 @@ test("localized names and phrases flow through", () => {
       dangerousGusts: "farlige vindkast",
       dryCalm: "tørt og vindstille begge veier",
       middayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
+      middayFlagSnow: " · kraftig snø midt på dagen — vurder hjemmekontor",
     },
   });
   expect(r.days[0].full).toBe("I dag");
@@ -390,6 +391,9 @@ test("icy roads: wet evening, cold night, still-cool morning — marker only, gr
   const snowy = tue({ "2026-09-22T08": sn(0.3, { temp: -1 }) });
   expect(snowy.toWork.cells[1].icy).toBe(true);
   expect(snowy.reason).toBe("light snow + icy roads possible to work");
+  // Snow on top of a wet evening and frosty night must not hide the warning.
+  const both = tue({ ...night(3), "2026-09-22T08": sn(0.2, { temp: 3 }) });
+  expect(both.toWork.cells[1].icy).toBe(true);
 });
 
 test("midday snow above 0.5 cm/h flags an A–C day, never a D/E/F one", () => {
@@ -401,7 +405,17 @@ test("midday snow above 0.5 cm/h flags an A–C day, never a D/E/F one", () => {
   expect(m.midday.snowDom).toBe(true);
   expect(m.midday.flag).toBe(true);
   expect(m.grade).toBe("A");
+  expect(m.reason).toBe("dry and calm both ways · heavy snow midday — consider home office");
   expect(tue({ "2026-09-22T11": sn(0.5) }).midday.flag).toBe(false);
+  // Sustained moderate snow: the water total (5 × 0.71 mm) is above 3 × rainOk.
+  const steady = tue({
+    "2026-09-22T09": sn(0.5),
+    "2026-09-22T10": sn(0.5),
+    "2026-09-22T11": sn(0.5),
+    "2026-09-22T12": sn(0.5),
+    "2026-09-22T13": sn(0.5),
+  });
+  expect(steady.midday.flag).toBe(true);
   const bad = tue({ "2026-09-22T07": sn(1), "2026-09-22T11": sn(0.6) });
   expect(bad.grade).toBe("D");
   expect(bad.midday.flag).toBe(false);
@@ -421,10 +435,7 @@ test("tyre guess: frost before yesterday or snow on the ground means winter tyre
 });
 
 test("tyre entity: on = winter, off = summer, anything else falls back to the guess", () => {
-  expect(icyWatchFrom("on", true)).toBe(false);
-  expect(icyWatchFrom("off", false)).toBe(true);
-  for (const s of [undefined, "unavailable", "unknown"]) {
-    expect(icyWatchFrom(s, true)).toBe(true);
-    expect(icyWatchFrom(s, false)).toBe(false);
-  }
+  expect(winterTyresFrom("on")).toBe(true);
+  expect(winterTyresFrom("off")).toBe(false);
+  for (const s of [undefined, "unavailable", "unknown"]) expect(winterTyresFrom(s)).toBe(null);
 });

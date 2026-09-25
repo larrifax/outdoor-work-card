@@ -82,6 +82,8 @@ export interface CommutePhrases {
   dryCalm: string;
   /** appended to the reason when the midday window is flagged */
   middayFlag: string;
+  /** same, when snow dominates the midday precipitation */
+  middayFlagSnow: string;
   /** shown when a commute hour has no forecast (day past the horizon) */
   noData: string;
 }
@@ -248,6 +250,7 @@ const EN_PHRASES: CommutePhrases = {
   sep: " · ",
   dryCalm: "dry and calm both ways",
   middayFlag: " · heavy rain midday — consider home office",
+  middayFlagSnow: " · heavy snow midday — consider home office",
   noData: "no forecast yet",
 };
 
@@ -271,9 +274,9 @@ export function summerTyres(hours: HourPoint[], now: number, tz: string): boolea
   return true;
 }
 
-/** Winter-tyres entity state → icyWatch. Missing / unavailable / unknown falls back to the guess. */
-export function icyWatchFrom(state: string | undefined, summerGuess: boolean): boolean {
-  return state === "on" ? false : state === "off" ? true : summerGuess;
+/** Winter-tyres entity state: on → true, off → false, missing / unavailable / unknown → null (use the guess). */
+export function winterTyresFrom(state: string | undefined): boolean | null {
+  return state === "on" ? true : state === "off" ? false : null;
 }
 
 export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions): CommuteResult {
@@ -309,12 +312,12 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     if (!o.icyWatch || p?.temp == null || p.temp > ICY_NOW_MAX) return false;
     const snowing = (p.snow ?? 0) > 0;
     let wet = 0;
-    let lastWet = snowing ? t : -Infinity;
+    let lastWet = t; // no earlier precipitation: only snow now can wet the road
     for (let k = ICY_LOOKBACK_H; k >= 1; k--) {
       const q = byT.get(t - k * H);
       if (!q || q.mm <= 0) continue;
       wet += q.mm;
-      if (!snowing) lastWet = t - k * H;
+      lastWet = t - k * H;
     }
     if (!snowing && wet <= ICY_WET_MM) return false;
     for (let u = lastWet; u <= t; u += H) {
@@ -382,7 +385,6 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     let peak = 0;
     let total = 0;
     let rainPeak = 0;
-    let rainTotal = 0;
     let snowPeak = 0;
     let snowTotal = 0;
     let water = 0;
@@ -391,17 +393,14 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
       peak = Math.max(peak, s.mm);
       total += s.mm;
       rainPeak = Math.max(rainPeak, s.rain);
-      rainTotal += s.rain;
       snowPeak = Math.max(snowPeak, s.snow);
       snowTotal += s.snow;
       water += s.water;
     }
-    // Only on A–C days: on D/E/F the grade already says "don't".
+    // Only on A–C days: on D/E/F the grade already says "don't". The total counts snow as water.
     const flag =
       gradeToLight(grade) < 2 &&
-      (rainPeak > o.rainOk ||
-        rainTotal > MIDDAY_TOTAL_FACTOR * o.rainOk ||
-        snowLevel(snowPeak) >= 2);
+      (rainPeak > o.rainOk || total > MIDDAY_TOTAL_FACTOR * o.rainOk || snowLevel(snowPeak) >= 2);
     return {
       mm: peak,
       total,
@@ -461,7 +460,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const unknown = [...toWork.cells, ...home.cells].some((c) => c.missing);
     const reason = unknown
       ? ph.noData
-      : `${bits.length ? bits.join(ph.sep) : ph.dryCalm}${midday.flag ? ph.middayFlag : ""}`;
+      : `${bits.length ? bits.join(ph.sep) : ph.dryCalm}${midday.flag ? (midday.snowDom ? ph.middayFlagSnow : ph.middayFlag) : ""}`;
 
     // Days are walked in order, so a weekday at or before the previous one means the week wrapped.
     const newWeek = prevIso !== null && iso <= prevIso;
