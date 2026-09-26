@@ -26,19 +26,29 @@ import {
   SNOW_OK,
   winterTyresFrom,
   summerTyres,
+  icyWatch,
   type CommuteResult,
   type CommuteDay,
   type CommuteWindow,
   type HourCell,
 } from "./commute";
-import { hm, durLabel, hLabel, localParts } from "./time";
+import { hm, hLabel, localParts } from "./time";
+import {
+  CAP,
+  washHero,
+  workHero,
+  dryTime,
+  dryByLines,
+  runwayBand,
+  windowLabel,
+  type Ctx,
+} from "./present";
 import { icons, taskIcon } from "./icons";
-import { strings, type Strings, type Seg, type WashKind } from "./i18n";
+import { strings, type Strings, type WashKind } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
 
 const VERSION = "2.0.0";
-const CAP = 48;
 
 declare global {
   interface Window {
@@ -417,7 +427,7 @@ export class OutdoorWorkCard extends LitElement {
     const winter = winterTyresFrom(state);
     // No weather yet (loading / fetch failed): no guess, no badges.
     const summer = this._weather ? summerTyres(this._weather.hours, Date.now(), r.tz) : false;
-    const res = { winter, summer, icyWatch: winter === null ? summer : !winter };
+    const res = { winter, summer, icyWatch: icyWatch(winter, summer) };
     this._tyreMemo = { deps, res };
     return res;
   }
@@ -637,47 +647,19 @@ export class OutdoorWorkCard extends LitElement {
       cap: CAP,
       names: r.names,
     });
-    const anyTonight = res.tonightOk.length > 0;
-    const allTonight = res.tonightOk.length === r.tasks.length;
-    const heroCls = anyTonight ? "ok" : "warn";
-    const today = res.days[0];
-    let verdict: string;
-    if (allTonight) verdict = t.goTonight;
-    else if (anyTonight)
-      verdict = t.goTonightOnly(
-        res.tonightOk.map((k) => r.tasks[k]!.name.toLowerCase()).join(", "),
-      );
-    else if (today?.passed) verdict = t.passedToday;
-    else verdict = t.notTonight;
-
-    const when = (d: WorkDay) =>
-      `${d.isToday ? t.tonight : d.full} · ${hm(d.effStart!, r.tz)}–${hm(d.end!, r.tz)}`;
+    const hero = workHero(res, r.tasks, this._ctx(r, t));
 
     return html`
-      <div class="hero ${heroCls}">
-        <div class="pill"><span class="dot"></span>${verdict}</div>
+      <div class="hero ${hero.ok ? "ok" : "warn"}">
+        <div class="pill"><span class="dot"></span>${hero.verdict}</div>
         ${r.tasks.map((task, k) => {
-          const v = res.tasks[k]!;
-          const nd = v.nextIdx >= 0 ? res.days[v.nextIdx] : undefined;
-          const ld = v.longestIdx >= 0 ? res.days[v.longestIdx] : undefined;
-          const need =
-            task.after === undefined
-              ? t.needDry(task.max_wet)
-              : t.needDryAfter(task.max_wet, task.after);
-          let detail: string;
-          if (!nd) detail = t.noDayMeets;
-          else {
-            detail = t.wetAtOpen(nd.wetAtStart.toFixed(1));
-            if (task.after !== undefined) detail += t.afterPart(hLabel(nd.after, CAP, t.hUnit));
-            detail += t.ofLight(durLabel(nd.hours, t.hUnit));
-            if (ld && ld !== nd) detail += t.longestPart(ld.full, durLabel(ld.hours, t.hUnit));
-          }
+          const v = hero.tasks[k]!;
           return html` <div class="task">
-            <div class="ico ${nd ? "on" : "off"}">${taskIcon(task.name)(18)}</div>
+            <div class="ico ${v.when ? "on" : "off"}">${taskIcon(task.name)(18)}</div>
             <div class="body">
-              <div class="k">${task.name} · ${need}</div>
-              <div class="v">${nd ? when(nd) : t.noWindowWeek}</div>
-              <div class="d">${detail}</div>
+              <div class="k">${task.name} · ${v.need}</div>
+              <div class="v">${v.when ?? t.noWindowWeek}</div>
+              <div class="d">${v.detail}</div>
             </div>
           </div>`;
         })}
@@ -691,53 +673,42 @@ export class OutdoorWorkCard extends LitElement {
     `;
   }
 
-  /** "21:00" on the window's day, "Fri 11:00" later, "—" never. */
-  private _dryTime(at: number | null, d: WorkDay, r: Resolved, t: Strings): string {
-    if (at === null) return t.dash;
-    const p = localParts(at, r.tz);
-    return p.key === d.key ? hm(at, r.tz) : `${r.names.short[p.wd]} ${hm(at, r.tz)}`;
+  private _ctx(r: Resolved, t: Strings): Ctx {
+    return { t, tz: r.tz, short: r.names.short };
   }
 
   private _workRow(d: WorkDay, i: number, r: Resolved, t: Strings): TemplateResult {
     const acc = r.accent;
-    const runway = (h: number, need: number) =>
-      h >= need ? acc : h >= need / 2 ? "var(--owc-amber)" : "var(--owc-dim)";
-    const runwayTxt = (h: number, need: number) =>
-      h >= need
-        ? "var(--owc-accent-text)"
-        : h >= need / 2
-          ? "var(--owc-amber-text)"
-          : "var(--owc-text-2)";
+    const ctx = this._ctx(r, t);
+    const band = runwayBand(d.after, r.tasks);
+    const runway = {
+      full: acc,
+      half: "var(--owc-amber)",
+      short: "var(--owc-dim)",
+      none: "var(--owc-dim)",
+    }[band];
+    const runwayTxt = {
+      full: "var(--owc-accent-text)",
+      half: "var(--owc-amber-text)",
+      short: "var(--owc-text-2)",
+      none: "var(--owc-text-2)",
+    }[band];
     const cell = dryByCell(d, r.tasks);
     const cellTxt = cell.all
       ? "✓"
-      : t.dryByCell(r.tasks[cell.task]!.name, this._dryTime(cell.at, d, r, t));
+      : t.dryByCell(r.tasks[cell.task]!.name, dryTime(cell.at, d, ctx));
     const cellColor = cell.all
       ? "var(--owc-accent-text)"
       : cell.soon
         ? "var(--owc-amber-text)"
         : "var(--owc-text-2)";
     const ref = d.effStart ?? d.start ?? d.dayStart;
-    const tipLines = r.tasks.map((task, k) =>
-      d.wetAtStart <= task.max_wet
-        ? t.dryByOk(task.name)
-        : d.dryAt[k] == null
-          ? t.dryByNever(task.name)
-          : t.dryByLater(task.name, this._dryTime(d.dryAt[k]!, d, r, t)),
-    );
-    const afters = r.tasks.map((task) => task.after).filter((x): x is number => x !== undefined);
-    const needA = afters.length ? Math.max(...afters) : 0;
+    const tipLines = dryByLines(d, r.tasks, ctx);
     const anyOk = d.ok.some(Boolean);
     const pct = (h: number, max: number) => `${Math.max(5, Math.min(100, (h / max) * 100))}%`;
 
     const winColor = d.during ? "var(--owc-red)" : anyOk ? acc : "var(--owc-dim)";
-    const winLabel = d.during
-      ? t.rowRain
-      : d.passed
-        ? t.rowPassed
-        : d.hours > 0
-          ? durLabel(d.hours, t.hUnit)
-          : t.rowDark;
+    const winLabel = windowLabel(d, t);
 
     return html` <div class="grid row ${classMap({ today: d.isToday, far: d.far })}">
       <div class="cell l"><span class="dn">${d.short}</span><span class="dd">${d.dom}</span></div>
@@ -768,11 +739,9 @@ export class OutdoorWorkCard extends LitElement {
       <div class="cell l">
         <div
           class="bar after"
-          style=${styleMap({ width: pct(d.after, CAP), background: needA ? runway(d.after, needA) : "var(--owc-dim)" })}
+          style=${styleMap({ width: pct(d.after, CAP), background: runway })}
         ></div>
-        <span
-          class="num"
-          style=${styleMap({ color: needA ? runwayTxt(d.after, needA) : "var(--owc-text-2)" })}
+        <span class="num" style=${styleMap({ color: runwayTxt })}
           >${hLabel(d.after, CAP, t.hUnit)}</span
         >
       </div>
@@ -797,87 +766,30 @@ export class OutdoorWorkCard extends LitElement {
       days: r.days,
       names: r.names,
     });
-    const best = res.days[res.bestIdx]!;
-    const today = res.days[0]!;
-    // `streak` = clean days after the wash day; -1 = the evening can't be washed at all.
-    const none = best.streak < 0; // no evening in the outlook works
-    const ok = !none && res.bestIdx === 0; // tonight is the pick
-    const skip = !ok && !none; // banner + trade-off state
-    const heroCls = ok ? "ok" : none ? "bad" : "rec";
-
-    const washStart = fmt(r.washStart);
-    const waitDays = res.bestIdx; // 0 = tonight
-    const gain = best.streak - today.streak; // may be <= 0 only through open-ended rounding
-    // A break day is always dirty, so `wetFrom` is set; "—" guards the type.
-    const describe = (d: WashDay) =>
-      t.describe(d.full, d.wetFrom === null ? t.dash : hm(d.wetFrom, r.tz));
-    const dayAt = (i: number) => (i >= 0 && i < res.days.length ? res.days[i] : undefined);
-    const todayBreak = dayAt(res.todayBreakIdx);
-    const bestBreak = dayAt(res.bestBreakIdx);
-
-    const caption = ok ? t.capBest : skip ? t.capWashOn : t.capOutlook;
-    const dayLabel = ok ? t.tonight : none ? t.dash : best.full;
-    const streakLabel = none ? t.nothingClean : t.cleanDays(best.streak, best.openEnded);
-
-    // Alert banner (skip only): why tonight is not the pick.
-    let bannerText = "";
-    if (skip) {
-      bannerText =
-        today.streak < 0
-          ? t.bannerRain(washStart) // can't wash tonight at all
-          : today.streak === 0
-            ? todayBreak
-              ? t.bannerBrief(describe(todayBreak)) // washable, but nothing lasts the day
-              : t.bannerRain(washStart)
-            : todayBreak
-              ? t.bannerLasts(today.streak, describe(todayBreak))
-              : t.bannerLastsNoBreak(today.streak);
-    }
-
-    // Context line under the recommended day.
-    let contextLine: string;
-    if (ok) {
-      contextLine = todayBreak
-        ? t.whyOkBreak(washStart, describe(todayBreak))
-        : t.whyOkNoRain(washStart);
-    } else if (none) {
-      contextLine = t.whyNone;
-    } else {
-      contextLine =
-        t.ctxSkipFrom(washStart, waitDays) +
-        (bestBreak ? t.ctxStaysUntil(describe(bestBreak)) : t.ctxStaysPast);
-    }
-
-    // Trade-off line (skip only, below a hairline). undefined = omit.
-    let tradeoff: TemplateResult | undefined;
-    if (skip) {
-      let segs: Seg[] | undefined;
-      if (today.streak < 0) segs = t.tradeoffFirst(best.full);
-      else if (gain >= 2) segs = t.tradeoffBuys(waitDays, gain, best.openEnded);
-      else if (gain === 1) segs = t.tradeoffOnly(waitDays);
-      // gain <= 0: omit (rounding of open-ended streaks).
-      if (segs)
-        tradeoff = html`${segs.map((s) =>
-          typeof s === "string" ? s : html`<strong class=${s.gain ? "gain" : ""}>${s.b}</strong>`,
-        )}`;
-    }
+    const hero = washHero(res, fmt(r.washStart), this._ctx(r, t));
+    const skip = hero.state === "rec";
+    const tradeoff = hero.tradeoff?.map((seg) =>
+      typeof seg === "string"
+        ? seg
+        : html`<strong class=${seg.gain ? "gain" : ""}>${seg.b}</strong>`,
+    );
 
     return html`
       ${
         skip
           ? html`<div class="alert">
               ${icons.alert(15)}
-              <div><span class="lbl">${t.bannerLbl}</span> · ${bannerText}</div>
+              <div><span class="lbl">${t.bannerLbl}</span> · ${hero.banner}</div>
             </div>`
           : nothing
       }
 
-      <div class="hero ${heroCls}">
-        <div class="cap">${caption}</div>
+      <div class="hero ${hero.state}">
+        <div class="cap">${hero.caption}</div>
         <div class="big">
-          <span class="day">${dayLabel}</span><span class="n">${streakLabel}</span>
+          <span class="day">${hero.day}</span><span class="n">${hero.streak}</span>
         </div>
-        <div class="why">${contextLine}</div>
+        <div class="why">${hero.context}</div>
         ${
           tradeoff
             ? html`<div class="tradeoff">${icons.arrow(16)}<span>${tradeoff}</span></div>`

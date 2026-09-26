@@ -279,6 +279,10 @@ export function winterTyresFrom(state: string | undefined): boolean | null {
   return state === "on" ? true : state === "off" ? false : null;
 }
 
+/** Evaluate the slippery-roads marker: the entity wins when set (winter tyres → off), else the weather guess. */
+export const icyWatch = (winter: boolean | null, summer: boolean): boolean =>
+  winter === null ? summer : !winter;
+
 export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions): CommuteResult {
   const short = o.names?.short ?? SHORT;
   const full = o.names?.full ?? FULL;
