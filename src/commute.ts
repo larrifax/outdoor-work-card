@@ -14,7 +14,7 @@
  */
 import type { HourPoint } from "./types";
 import { localParts, zonedToUtc, zonedMin, isoWd } from "./time";
-import { FAR_HOURS, SHORT, FULL, type Names } from "./logic";
+import { buildDays, type DayBase, type Names } from "./logic";
 
 const H = 3_600_000;
 
@@ -177,17 +177,9 @@ export interface MiddaySummary {
   flag: boolean;
 }
 
-export interface CommuteDay {
-  key: string;
-  short: string;
-  full: string;
-  dom: number;
-  isToday: boolean;
+export interface CommuteDay extends DayBase {
   /** first shown day of a new calendar week (draw a divider before it) */
   newWeek: boolean;
-  /** beyond the fine-resolution forecast horizon */
-  far: boolean;
-  dayStart: number;
   toWork: CommuteWindow;
   midday: MiddaySummary;
   home: CommuteWindow;
@@ -254,6 +246,32 @@ export const EN_PHRASES: CommutePhrases = {
   noData: "no forecast yet",
 };
 
+/** Day grade from the two commute levels: any dangerous → F, then how many are bad / tolerable. */
+export function gradeDay(toWork: Level, home: Level): Grade {
+  const [lo, hi] = toWork < home ? [toWork, home] : [home, toWork];
+  return hi === 3
+    ? "F"
+    : hi === 2
+      ? lo === 2
+        ? "E"
+        : "D"
+      : hi === 1
+        ? lo === 1
+          ? "C"
+          : "B"
+        : "A";
+}
+
+/** Rain part, mm/h → level on the rider's thresholds (above DANGER_RAIN is always dangerous). */
+export const rainLevel = (mm: number, t: Thresholds): Level =>
+  mm > DANGER_RAIN ? 3 : mm <= t.rainFine ? 0 : mm <= t.rainOk ? 1 : 2;
+/** Effective wind, m/s → level. */
+export const windLevel = (w: number, t: Thresholds): Level =>
+  w > DANGER_WIND ? 3 : w <= t.windFine ? 0 : w <= t.windOk ? 1 : 2;
+/** Snowfall, cm/h → level on the fixed snow scale. */
+export const snowLevel = (cm: number): Level =>
+  cm <= 0 ? 0 : cm > DANGER_SNOW ? 3 : cm <= SNOW_OK ? 1 : 2;
+
 export function gradeToLight(g: Grade): Light {
   return g === "A" || g === "B" ? 0 : g === "C" ? 1 : 2;
 }
@@ -284,8 +302,6 @@ export const icyWatch = (winter: boolean | null, summer: boolean): boolean =>
   winter === null ? summer : !winter;
 
 export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions): CommuteResult {
-  const short = o.names?.short ?? SHORT;
-  const full = o.names?.full ?? FULL;
   const today = o.today ?? "Today";
   const tomorrow = o.tomorrow ?? "Tomorrow";
   const ph = o.phrases ?? EN_PHRASES;
@@ -293,16 +309,10 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   const byT = new Map<number, HourPoint>();
   for (const h of hours) byT.set(h.t, h);
 
-  const rainLevel = (mm: number): Level =>
-    mm > DANGER_RAIN ? 3 : mm <= o.rainFine ? 0 : mm <= o.rainOk ? 1 : 2;
-  const windLevel = (w: number): Level =>
-    w > DANGER_WIND ? 3 : w <= o.windFine ? 0 : w <= o.windOk ? 1 : 2;
   const worse = (a: Level, b: Level): Level => (a > b ? a : b);
   const rainWords = ["", ph.lightRain, ph.rain, ph.cloudburst];
   const windWords = ["", ph.breezy, ph.strongWind, ph.dangerousGusts];
   const snowWords = ["", ph.lightSnow, ph.snow, ph.heavySnow];
-  const snowLevel = (cm: number): Level =>
-    cm <= 0 ? 0 : cm > DANGER_SNOW ? 3 : cm <= SNOW_OK ? 1 : 2;
   /** Precipitation split: total mm, snowfall cm, snow water mm, rain part mm. */
   const split = (p: HourPoint | undefined) => {
     const mm = p?.mm ?? 0;
@@ -338,9 +348,9 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const wind = p?.wind ?? 0;
     const gust = p?.gust ?? wind;
     const eff = Math.max(wind, gust * GUST_FACTOR);
-    const rain = rainLevel(s.rain);
+    const rain = rainLevel(s.rain, o);
     const sl = snowLevel(s.snow);
-    const wl = windLevel(eff);
+    const wl = windLevel(eff, o);
     return {
       t,
       label: String(lp.h).padStart(2, "0"),
@@ -408,7 +418,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     return {
       mm: peak,
       total,
-      rain: rainLevel(rainPeak),
+      rain: rainLevel(rainPeak, o),
       snow: snowPeak,
       snowTotal,
       snowLevel: snowLevel(snowPeak),
@@ -418,35 +428,19 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   };
 
   // Walk forward from today, keeping workdays until we have `days`. Today is skipped once its home window is over.
-  const todayParts = localParts(now, o.tz);
   const days: CommuteDay[] = [];
   let prevIso: number | null = null;
-  for (let i = 0; days.length < o.days && i < 21; i++) {
-    const noon = zonedToUtc(todayParts.y, todayParts.m, todayParts.d + i, 12, 0, o.tz);
-    const p = localParts(noon, o.tz);
+  for (const [i, base] of buildDays(now, o.tz, 21, o.names).entries()) {
+    if (days.length >= o.days) break;
+    const p = localParts(base.dayStart + 12 * H, o.tz);
     const iso = isoWd(p.wd);
     if (!o.workdays.includes(iso)) continue;
-    const dayStart = zonedToUtc(p.y, p.m, p.d, 0, 0, o.tz);
-    const homeEnd = zonedMin(p, o.home[1], o.tz);
-    if (i === 0 && now >= homeEnd) continue;
+    if (i === 0 && now >= zonedMin(p, o.home[1], o.tz)) continue;
 
     const toWork = windowFor(p.y, p.m, p.d, o.toWork);
     const home = windowFor(p.y, p.m, p.d, o.home);
 
-    const lw = toWork.level;
-    const lh = home.level;
-    const grade: Grade =
-      lw === 3 || lh === 3
-        ? "F"
-        : lw === 2 && lh === 2
-          ? "E"
-          : lw === 2 || lh === 2
-            ? "D"
-            : lw === 1 && lh === 1
-              ? "C"
-              : lw === 1 || lh === 1
-                ? "B"
-                : "A";
+    const grade = gradeDay(toWork.level, home.level);
     const midday = middayFor(p.y, p.m, p.d, o.midday, grade);
 
     // Precipitation words from the worse of rain and snow (snow wins a tie), then wind, then icy.
@@ -470,14 +464,9 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const newWeek = prevIso !== null && iso <= prevIso;
 
     days.push({
-      key: p.key,
-      short: short[p.wd]!,
-      full: i === 0 ? today : i === 1 ? tomorrow : full[p.wd]!,
-      dom: p.d,
-      isToday: i === 0,
+      ...base,
+      full: i === 0 ? today : i === 1 ? tomorrow : base.full,
       newWeek,
-      far: dayStart > now + FAR_HOURS * H,
-      dayStart,
       toWork,
       midday,
       home,

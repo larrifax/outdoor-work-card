@@ -315,7 +315,6 @@ export class OutdoorWorkCardEditor extends LitElement {
       ...merged,
       type: this._config?.type ?? "custom:outdoor-work-card",
     } as CardConfig;
-    // Keep only the keys of the active mode + common ones tidy.
     this._config = next;
     this.dispatchEvent(
       new CustomEvent("config-changed", {

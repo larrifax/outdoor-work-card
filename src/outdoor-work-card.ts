@@ -315,7 +315,7 @@ export class OutdoorWorkCard extends LitElement {
           ),
         );
       }
-      note = t.popNoSalt;
+      note = t.popSalt;
     } else {
       head = t.popHeadWork;
       const end =

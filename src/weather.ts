@@ -9,6 +9,15 @@
 import type { HourPoint, WeatherData } from "./types";
 
 const BASE = "https://api.open-meteo.com/v1/forecast";
+const HOURLY = [
+  "precipitation",
+  "wind_speed_10m",
+  "wind_gusts_10m",
+  "et0_fao_evapotranspiration",
+  "snowfall",
+  "temperature_2m",
+  "snow_depth",
+] as const;
 
 interface Entry {
   promise: Promise<WeatherData> | null;
@@ -51,8 +60,7 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const p = new URLSearchParams({
     latitude: req.lat.toFixed(4),
     longitude: req.lon.toFixed(4),
-    hourly:
-      "precipitation,wind_speed_10m,wind_gusts_10m,et0_fao_evapotranspiration,snowfall,temperature_2m,snow_depth",
+    hourly: HOURLY.join(","),
     wind_speed_unit: "ms",
     models: req.model,
     past_days: String(req.pastDays),
@@ -64,7 +72,18 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
   const json = await res.json();
   if (json.error) throw new Error(json.reason || "Open-Meteo error");
-  const times: number[] = json.hourly?.time ?? [];
+  const now = Date.now();
+  return { hours: parseHourly(json, now), fetchedAt: now, model: req.model };
+}
+
+type Col = (number | null)[] | undefined;
+interface OpenMeteoJson {
+  hourly?: Partial<Record<(typeof HOURLY)[number] | "time", Col>>;
+}
+
+/** Open-Meteo hourly response → HourPoint[], with the fallbacks for missing values. */
+export function parseHourly(json: OpenMeteoJson, now: number): HourPoint[] {
+  const times = (json.hourly?.time ?? []) as number[];
   const mm: (number | null)[] = json.hourly?.precipitation ?? [];
   const ws: (number | null)[] = json.hourly?.wind_speed_10m ?? [];
   const wg: (number | null)[] = json.hourly?.wind_gusts_10m ?? [];
@@ -73,8 +92,7 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
   const sf: (number | null)[] = json.hourly?.snowfall ?? [];
   const tc: (number | null)[] = json.hourly?.temperature_2m ?? [];
   const sd: (number | null)[] = json.hourly?.snow_depth ?? [];
-  const now = Date.now();
-  const hours: HourPoint[] = times.map((t, i) => {
+  return times.map((t, i) => {
     const ms = t * 1000;
     const wind = ws[i] ?? 0;
     return {
@@ -89,5 +107,4 @@ async function fetchWeather(req: WeatherRequest): Promise<WeatherData> {
       past: ms + 3_600_000 <= now,
     };
   });
-  return { hours, fetchedAt: now, model: req.model };
 }
