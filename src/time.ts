@@ -76,6 +76,14 @@ export function zonedToUtc(
   return guess;
 }
 
+/** UTC ms for `min` minutes after local midnight of the local date in `p`. */
+export function zonedMin(p: { y: number; m: number; d: number }, min: number, tz: string): number {
+  return zonedToUtc(p.y, p.m, p.d, Math.floor(min / 60), min % 60, tz);
+}
+
+/** Weekday 0 = Sun … 6 = Sat → ISO 1 = Mon … 7 = Sun. */
+export const isoWd = (wd: number): number => (wd === 0 ? 7 : wd);
+
 /** Parse "HH:MM" → minutes since midnight. Returns null when malformed. */
 export function parseHM(s: string | undefined, fallback: string): number {
   const str = (s && /^\d{1,2}:\d{2}(:\d{2})?$/.test(s) ? s : fallback).split(":");

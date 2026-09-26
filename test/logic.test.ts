@@ -1,5 +1,13 @@
 import { test, expect } from "vitest";
-import { planWork, planWash, buildDays, dryByCell } from "../src/logic";
+import {
+  planWork,
+  planWash,
+  buildDays,
+  dryByCell,
+  roadState,
+  streakFrom,
+  breakDay,
+} from "../src/logic";
 import type { HourPoint } from "../src/types";
 
 const TZ = "Europe/Oslo";
@@ -406,4 +414,33 @@ test("wash: salted but dry roads while driving stay clean", () => {
   const r = planWash(salty([["2026-09-17T01:00", 0.3]], ["2026-09-17T01"]), NOW, WASH);
   expect(r.days[1].clean).toBe(true);
   expect(r.days[2].clean).toBe(true);
+});
+
+test("streak engine: plain day flags in, streak and break day out", () => {
+  // c = clean, e = dirty daytime but clean evening, x = can't wash that evening, ? = no data
+  const d = (s: string) =>
+    [...s].map((c) => ({ hasData: c !== "?", clean: c === "c", eveningClean: c !== "x" }));
+  expect(streakFrom(d("xcc"), 0)).toEqual({ n: -1, open: false });
+  expect(streakFrom(d("ccec"), 0)).toEqual({ n: 1, open: false });
+  expect(breakDay(d("ccec"), 0)).toBe(2);
+  expect(streakFrom(d("cc?c"), 0)).toEqual({ n: 1, open: true });
+  expect(breakDay(d("cc?c"), 0)).toBe(-1);
+  expect(streakFrom(d("eccc"), 0)).toEqual({ n: 3, open: true });
+});
+
+test("road state: rain wets the road, it dries hour by hour, parked hours don't drive", () => {
+  const t0 = Date.parse("2026-09-16T12:00+02:00"); // Wednesday
+  const hrs = [0.5, 0, 0, 0, 0].map((mm, i) => ({ t: t0 + i * H, mm, wind: 0 }));
+  const r = roadState(hrs, {
+    tz: TZ,
+    okRain: 0.2,
+    dryRoadsHours: 3,
+    nightFrom: 22 * 60,
+    nightUntil: 6 * 60,
+    parked: [13 * 60, 14 * 60],
+    workdays: [3],
+  });
+  expect(r.map((h) => h.wet)).toEqual([true, true, true, false, false]);
+  expect(r.map((h) => h.rainy)).toEqual([true, false, false, false, false]);
+  expect(r.map((h) => h.driving)).toEqual([true, false, true, true, true]);
 });

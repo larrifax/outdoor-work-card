@@ -13,7 +13,7 @@
  * informational only and never changes a level or the grade.
  */
 import type { HourPoint } from "./types";
-import { localParts, zonedToUtc } from "./time";
+import { localParts, zonedToUtc, zonedMin, isoWd } from "./time";
 import { FAR_HOURS, SHORT, FULL, type Names } from "./logic";
 
 const H = 3_600_000;
@@ -420,10 +420,10 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   for (let i = 0; days.length < o.days && i < 21; i++) {
     const noon = zonedToUtc(todayParts.y, todayParts.m, todayParts.d + i, 12, 0, o.tz);
     const p = localParts(noon, o.tz);
-    const iso = p.wd === 0 ? 7 : p.wd;
+    const iso = isoWd(p.wd);
     if (!o.workdays.includes(iso)) continue;
     const dayStart = zonedToUtc(p.y, p.m, p.d, 0, 0, o.tz);
-    const homeEnd = zonedToUtc(p.y, p.m, p.d, Math.floor(o.home[1] / 60), o.home[1] % 60, o.tz);
+    const homeEnd = zonedMin(p, o.home[1], o.tz);
     if (i === 0 && now >= homeEnd) continue;
 
     const toWork = windowFor(p.y, p.m, p.d, o.toWork);

@@ -3,7 +3,7 @@
  * derived here from an hourly precipitation series and the config.
  */
 import type { HourPoint, TaskConfig } from "./types";
-import { localParts, zonedToUtc, hoursBetween } from "./time";
+import { localParts, zonedToUtc, zonedMin, isoWd, hoursBetween } from "./time";
 import { sunTimesFor } from "./sun";
 
 const H = 3_600_000;
@@ -166,11 +166,11 @@ export function planWork(hours: HourPoint[], now: number, o: WorkOptions): WorkR
   const days: WorkDay[] = base.map((b) => {
     const p = localParts(b.dayStart + 12 * H, o.tz);
     const startMin = b.isWeekend ? o.weekendStart : o.weekdayStart;
-    const start = zonedToUtc(p.y, p.m, p.d, Math.floor(startMin / 60), startMin % 60, o.tz);
+    const start = zonedMin(p, startMin, o.tz);
 
     let end: number | null;
     if (typeof o.windowEnd === "number") {
-      end = zonedToUtc(p.y, p.m, p.d, Math.floor(o.windowEnd / 60), o.windowEnd % 60, o.tz);
+      end = zonedMin(p, o.windowEnd, o.tz);
     } else {
       const s = sunTimesFor(p.y, p.m, p.d, o.lat, o.lon, o.tz);
       end = o.windowEnd === "sunset" ? s.sunset : s.dusk;
@@ -337,57 +337,100 @@ export interface WashResult {
 const inRange = (m: number, from: number, until: number) =>
   from > until ? m >= from || m < until : m >= from && m < until;
 
-export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
-  // Evaluate a few days beyond the displayed range so streaks can run past it.
-  const extra = 3;
-  const base = buildDays(now, o.tz, o.days + extra, o.names);
-
-  // Per-hour road state; the hour before the data starts counts as dry.
-  const wet: boolean[] = [];
-  const driving: boolean[] = [];
+/** Road state for one hour of the series. */
+export interface RoadHour {
+  wet: boolean;
+  /** someone drives: not night, not parked indoors */
+  driving: boolean;
   /** the hour's precipitation wet the roads (threshold depends on salt) */
-  const rainy: boolean[] = [];
+  rainy: boolean;
   /** roads are wet only because salt lowered the threshold (the wetting hour was ≤ okRain) */
-  const saltWet: boolean[] = [];
+  saltWet: boolean;
+}
+
+export type RoadOptions = Pick<
+  WashOptions,
+  "tz" | "okRain" | "dryRoadsHours" | "nightFrom" | "nightUntil" | "parked" | "workdays"
+>;
+
+/** Per-hour road state, aligned with `hours`; the hour before the data starts counts as dry. */
+export function roadState(hours: HourPoint[], o: RoadOptions): RoadHour[] {
   let bySalt = false;
   let drying = 0;
   // ponytail: salt triggered before the fetched past days (7) is missed; accept, or fetch more history.
   let salt = false;
   let washOff = 0;
-  for (const h of hours) {
+  return hours.map((h) => {
     const p = localParts(h.t, o.tz);
     const m = p.h * 60 + p.mi;
     const night = inRange(m, o.nightFrom, o.nightUntil);
-    const iso = p.wd === 0 ? 7 : p.wd;
     const parked =
-      o.parked !== null && o.workdays.includes(iso) && inRange(m, o.parked[0], o.parked[1]);
-    driving.push(!night && !parked);
+      o.parked !== null && o.workdays.includes(isoWd(p.wd)) && inRange(m, o.parked[0], o.parked[1]);
     if (salt) {
       washOff += h.mm;
       if (washOff >= SALT_WASH_OFF) salt = false;
     }
-    rainy.push(h.mm > (salt ? SALT_WET : o.okRain));
-    if (rainy[rainy.length - 1]) {
+    const rainy = h.mm > (salt ? SALT_WET : o.okRain);
+    let wet: boolean;
+    if (rainy) {
       drying = o.dryRoadsHours;
       bySalt = h.mm <= o.okRain;
-      wet.push(true);
+      wet = true;
     } else {
       if (drying > 0) drying -= night ? NIGHT_DRYING : 1;
-      wet.push(drying > 0);
+      wet = drying > 0;
     }
-    saltWet.push(wet[wet.length - 1]! && bySalt);
-    if (h.temp != null && h.temp <= SALT_TEMP && (wet[wet.length - 1] || (h.snow ?? 0) > 0)) {
+    if (h.temp != null && h.temp <= SALT_TEMP && (wet || (h.snow ?? 0) > 0)) {
       salt = true;
       washOff = 0;
     }
-  }
-  const dirtyAt = (i: number) => wet[i]! && driving[i]!;
+    return { wet, driving: !night && !parked, rainy, saltWet: wet && bySalt };
+  });
+}
 
-  type Info = {
-    clean: boolean;
-    eveningClean: boolean;
+/** What the streak rules need to know about one day. */
+export interface StreakDay {
+  /** the day has forecast data */
+  hasData: boolean;
+  /** no driving hour on wet roads all day */
+  clean: boolean;
+  /** no driving hour on wet roads from the wash evening on */
+  eveningClean: boolean;
+}
+
+/**
+ * Clean days after washing on the evening of day `s` (-1 = can't wash that evening),
+ * `open` when the run hits the end of the data.
+ */
+export function streakFrom(days: StreakDay[], s: number): { n: number; open: boolean } {
+  // Wash day itself isn't counted — the car is dry in the garage overnight.
+  if (!days[s]!.eveningClean) return { n: -1, open: false };
+  let n = 0;
+  for (let j = s + 1; j < days.length; j++) {
+    if (!days[j]!.hasData) return { n, open: true };
+    if (!days[j]!.clean) return { n, open: false };
+    n++;
+  }
+  // Ran past the evaluated days without hitting wet roads: it's *at least* n.
+  return { n, open: true };
+}
+
+/** Index of the day whose wet roads end the streak from `s`, -1 when open-ended or past the data. */
+export function breakDay(days: StreakDay[], s: number): number {
+  const st = streakFrom(days, s);
+  const b = s + st.n + 1; // wash day not counted, so the break sits one day later
+  return st.open || b >= days.length ? -1 : b;
+}
+
+export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashResult {
+  // Evaluate a few days beyond the displayed range so streaks can run past it.
+  const extra = 3;
+  const base = buildDays(now, o.tz, o.days + extra, o.names);
+  const road = roadState(hours, o);
+  const dirtyAt = (i: number) => road[i]!.wet && road[i]!.driving;
+
+  type Info = StreakDay & {
     peak: number;
-    hasData: boolean;
     evening: number;
     wetFrom: number | null;
     salted: boolean;
@@ -396,7 +439,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
   const info: Info[] = base.map((b) => {
     const dayEnd = b.dayStart + 24 * H;
     const p = localParts(b.dayStart + 12 * H, o.tz);
-    const washAt = zonedToUtc(p.y, p.m, p.d, Math.floor(o.washStart / 60), o.washStart % 60, o.tz);
+    const washAt = zonedMin(p, o.washStart, o.tz);
     const evening = Math.max(washAt, b.isToday ? now : washAt);
     let clean = true;
     let eveningClean = true;
@@ -409,36 +452,23 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
       hasData = true;
       peak = Math.max(peak, h.mm);
-      if (wet[i]) lastWet = i;
+      if (road[i]!.wet) lastWet = i;
       if (!dirtyAt(i)) return;
       clean = false;
       if (wetFrom === null) {
         wetFrom = h.t;
-        saltedWet = saltWet[i]!;
+        saltedWet = road[i]!.saltWet;
       }
       if (h.t + H > evening) eveningClean = false;
     });
     let dryAt: number | null = null;
     if (lastWet >= 0) {
-      const j = wet.indexOf(false, lastWet);
+      const j = road.findIndex((r, k) => k >= lastWet && !r.wet);
       dryAt = j >= 0 ? hours[j]!.t : null;
     }
     if (!hasData) clean = eveningClean = false;
     return { clean, eveningClean, peak, hasData, evening, wetFrom, salted: saltedWet, dryAt };
   });
-
-  const streakFrom = (s: number): { n: number; open: boolean } => {
-    // Wash day itself isn't counted — the car is dry in the garage overnight.
-    if (!info[s]!.eveningClean) return { n: -1, open: false };
-    let n = 0;
-    for (let j = s + 1; j < info.length; j++) {
-      if (!info[j]!.hasData) return { n, open: true };
-      if (!info[j]!.clean) return { n, open: false };
-      n++;
-    }
-    // Ran past the evaluated days without hitting wet roads: it's *at least* n.
-    return { n, open: true };
-  };
 
   const nextDirtyFrom = (s: number): DirtyStretch | null => {
     const inf = info[s]!;
@@ -449,11 +479,11 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     while (end + 1 < hours.length && dirtyAt(end + 1)) end++;
     // Count every rain hour of the wet spell, back to where it began.
     let from = start;
-    while (from > 0 && wet[from - 1]) from--;
+    while (from > 0 && road[from - 1]!.wet) from--;
     let peak = 0;
     let total = 0;
     for (let i = from; i <= end; i++) {
-      if (!rainy[i]) continue;
+      if (!road[i]!.rainy) continue;
       const mm = hours[i]!.mm;
       peak = Math.max(peak, mm);
       total += mm;
@@ -463,7 +493,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
 
   const days: WashDay[] = base.slice(0, o.days).map((b, i) => {
     const inf = info[i]!;
-    const st = streakFrom(i);
+    const st = streakFrom(info, i);
     const icon: WashIcon = inf.peak <= 0.05 ? "sun" : inf.clean ? "moon" : "rain";
     return {
       ...b,
@@ -485,14 +515,5 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     if (d.streak > days[bestIdx]!.streak) bestIdx = i;
   });
 
-  const t0 = streakFrom(0);
-  const breakIdx = t0.n + 1; // wash day not counted, so the break sits one day later
-  const todayBreakIdx = t0.open ? -1 : breakIdx < base.length ? breakIdx : -1;
-
-  // Same, for the recommended evening: the day whose wet roads end its streak.
-  const tb = streakFrom(bestIdx);
-  const bb = bestIdx + tb.n + 1;
-  const bestBreakIdx = tb.open ? -1 : bb < base.length ? bb : -1;
-
-  return { days, bestIdx, todayBreakIdx, bestBreakIdx };
+  return { days, bestIdx, todayBreakIdx: breakDay(info, 0), bestBreakIdx: breakDay(info, bestIdx) };
 }
