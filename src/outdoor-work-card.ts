@@ -297,18 +297,21 @@ export class OutdoorWorkCard extends LitElement {
     if (r.mode === "carwash") {
       head = t.popHeadWash;
       rows = [
-        this._ruleRow(t.popWashFrom, mono(fmt(r.washStart))),
-        this._ruleRow(t.popWetAbove, mono(t.popWetVal(r.okRain))),
-        this._ruleRow(t.popDryAgain, mono(t.popHours(r.dryRoadsHours))),
-        this._ruleRow(t.popNightDry, mono(t.popSpan(fmt(r.nightFrom), fmt(r.nightUntil)))),
+        this._ruleRow(t.popWashFrom, mono(fmt(r.wash.washStart))),
+        this._ruleRow(t.popWetAbove, mono(t.popWetVal(r.wash.okRain))),
+        this._ruleRow(t.popDryAgain, mono(t.popHours(r.wash.dryRoadsHours))),
+        this._ruleRow(
+          t.popNightDry,
+          mono(t.popSpan(fmt(r.wash.nightFrom), fmt(r.wash.nightUntil))),
+        ),
       ];
-      if (r.parked) {
+      if (r.wash.parked) {
         // ISO 1 = Mon … 7 = Sun → names index 0 = Sun.
-        const days = r.workdays.map((d) => r.names.short[d % 7]).join(" ");
+        const days = r.wash.workdays.map((d) => r.names.short[d % 7]).join(" ");
         rows.push(
           this._ruleRow(
             t.popParked,
-            mono(t.popParkedVal(fmt(r.parked[0]), fmt(r.parked[1]), days)),
+            mono(t.popParkedVal(fmt(r.wash.parked[0]), fmt(r.wash.parked[1]), days)),
           ),
         );
       }
@@ -316,17 +319,17 @@ export class OutdoorWorkCard extends LitElement {
     } else {
       head = t.popHeadWork;
       const end =
-        typeof r.windowEnd === "number"
-          ? fmt(r.windowEnd)
-          : r.windowEnd === "sunset"
+        typeof r.work.windowEnd === "number"
+          ? fmt(r.work.windowEnd)
+          : r.work.windowEnd === "sunset"
             ? t.sunset
             : t.dusk;
       rows = [
-        this._ruleRow(t.popWeekdayWin, html`${mono(fmt(r.weekdayStart))} → ${mono(end)}`),
-        this._ruleRow(t.popWeekendWin, html`${mono(fmt(r.weekendStart))} → ${mono(end)}`),
-        this._ruleRow(t.popIgnoreUnder, mono(t.popMinutes(r.minWindowMinutes))),
-        this._ruleRow(t.popCountsRain, mono(t.popAboveRate(r.rainThreshold))),
-        ...r.tasks.map((task) =>
+        this._ruleRow(t.popWeekdayWin, html`${mono(fmt(r.work.weekdayStart))} → ${mono(end)}`),
+        this._ruleRow(t.popWeekendWin, html`${mono(fmt(r.work.weekendStart))} → ${mono(end)}`),
+        this._ruleRow(t.popIgnoreUnder, mono(t.popMinutes(r.work.minWindowMinutes))),
+        this._ruleRow(t.popCountsRain, mono(t.popAboveRate(r.work.rainThreshold))),
+        ...r.work.tasks.map((task) =>
           this._ruleRow(
             task.name,
             task.after === undefined
@@ -379,11 +382,15 @@ export class OutdoorWorkCard extends LitElement {
         <span></span><span class="c0">${t.popFine}</span><span class="c1">${t.popTolerable}</span
         ><span class="c2">${t.popBad}</span><span class="c3">${t.popDanger}</span>
         <span class="k">${icons.drop(11)}${t.popRainLabel}</span
-        ><span class="mono">≤ ${r.rainFine}</span><span class="mono">≤ ${r.rainOk}</span
-        ><span class="mono">&gt; ${r.rainOk}</span><span class="mono">&gt; ${DANGER_RAIN}</span>
+        ><span class="mono">≤ ${r.commute.rainFine}</span
+        ><span class="mono">≤ ${r.commute.rainOk}</span
+        ><span class="mono">&gt; ${r.commute.rainOk}</span
+        ><span class="mono">&gt; ${DANGER_RAIN}</span>
         <span class="k">${icons.wind(12)}${t.popWindLabel}</span
-        ><span class="mono">≤ ${r.windFine}</span><span class="mono">≤ ${r.windOk}</span
-        ><span class="mono">&gt; ${r.windOk}</span><span class="mono">&gt; ${DANGER_WIND}</span>
+        ><span class="mono">≤ ${r.commute.windFine}</span
+        ><span class="mono">≤ ${r.commute.windOk}</span
+        ><span class="mono">&gt; ${r.commute.windOk}</span
+        ><span class="mono">&gt; ${DANGER_WIND}</span>
         <span class="k">${icons.snowflake(11)}${t.popSnowLabel}</span><span class="mono">0</span
         ><span class="mono">≤ ${SNOW_OK}</span><span class="mono">&gt; ${SNOW_OK}</span
         ><span class="mono">&gt; ${DANGER_SNOW}</span>
@@ -394,8 +401,8 @@ export class OutdoorWorkCard extends LitElement {
       <div class="note">
         ${t.popIcyLine(ICY_NIGHT_MAX, ICY_NOW_MAX)}
         ${
-          r.winterTyresEntity
-            ? t.popTyresEntity(r.winterTyresEntity, tyres.winter, tyres.summer)
+          r.commute.winterTyresEntity
+            ? t.popTyresEntity(r.commute.winterTyresEntity, tyres.winter, tyres.summer)
             : t.popTyresAuto(tyres.summer)
         }
       </div>
@@ -409,7 +416,7 @@ export class OutdoorWorkCard extends LitElement {
         <span class="gb f">F</span><span>${t.popGradeF}</span>
       </div>
       <div class="note">
-        ${t.popCommuteNote(fmt(r.toWork[0]), fmt(r.toWork[1]), fmt(r.home[0]), fmt(r.home[1]))}
+        ${t.popCommuteNote(fmt(r.commute.toWork[0]), fmt(r.commute.toWork[1]), fmt(r.commute.home[0]), fmt(r.commute.home[1]))}
         ${t.popMidday}
       </div>
       <div class="src">${t.popSrc(model)}</div>
@@ -420,7 +427,9 @@ export class OutdoorWorkCard extends LitElement {
 
   /** Tyre state: `winter` from the entity (null = unset/unusable), `summer` = weather guess. Memoized: hass pushes often. */
   private _tyres(r: Resolved): { winter: boolean | null; summer: boolean; icyWatch: boolean } {
-    const state = r.winterTyresEntity ? this.hass?.states?.[r.winterTyresEntity]?.state : undefined;
+    const state = r.commute.winterTyresEntity
+      ? this.hass?.states?.[r.commute.winterTyresEntity]?.state
+      : undefined;
     const deps = [this._weather, this._tick, r.tz, state];
     const memo = this._tyreMemo;
     if (memo && memo.deps.every((d, i) => d === deps[i])) return memo.res;
@@ -438,40 +447,14 @@ export class OutdoorWorkCard extends LitElement {
     const memo = this._commuteMemo;
     if (memo && memo.deps.every((d, i) => d === deps[i])) return this._commuteView(r, t, memo.res);
     const res: CommuteResult = planCommute(this._weather!.hours, Date.now(), {
+      ...r.commute,
       tz: r.tz,
-      toWork: r.toWork,
-      home: r.home,
-      midday: r.midday,
-      rainFine: r.rainFine,
-      rainOk: r.rainOk,
-      windFine: r.windFine,
-      windOk: r.windOk,
-      workdays: r.workdays,
       days: 5,
       icyWatch,
       names: { short: r.names.short, full: r.names.full },
       today: t.cToday,
       tomorrow: t.cTomorrow,
-      phrases: {
-        rain: t.cRain,
-        lightRain: t.cLightRain,
-        strongWind: t.cStrongWind,
-        breezy: t.cBreezy,
-        cloudburst: t.cCloudburst,
-        dangerousGusts: t.cDangerousGusts,
-        lightSnow: t.cLightSnow,
-        snow: t.cSnow,
-        heavySnow: t.cHeavySnow,
-        icy: t.cIcy,
-        toWork: t.cToWork,
-        home: t.cHome,
-        and: t.cAnd,
-        sep: t.cSep,
-        dryCalm: t.cDryCalm,
-        middayFlag: t.cMiddayFlag,
-        middayFlagSnow: t.cMiddayFlagSnow,
-        noData: t.cNoData,
-      },
+      phrases: t.commute,
     });
     this._commuteMemo = { deps, res };
     return this._commuteView(r, t, res);
@@ -503,10 +486,12 @@ export class OutdoorWorkCard extends LitElement {
       <div class="cgrid ccols">
         <span>${t.cColDay}</span><span class="c">${t.cColGrade}</span>
         <span class="c"
-          >${t.cColToWork(fmt(r.toWork[0]).slice(0, 2), fmt(r.toWork[1]).slice(0, 2))}</span
+          >${t.cColToWork(fmt(r.commute.toWork[0]).slice(0, 2), fmt(r.commute.toWork[1]).slice(0, 2))}</span
         >
         <span class="c dim">${t.cColMidday}</span>
-        <span class="c">${t.cColHome(fmt(r.home[0]).slice(0, 2), fmt(r.home[1]).slice(0, 2))}</span>
+        <span class="c"
+          >${t.cColHome(fmt(r.commute.home[0]).slice(0, 2), fmt(r.commute.home[1]).slice(0, 2))}</span
+        >
       </div>
       <div class="crows">
         ${res.days.map(
@@ -634,25 +619,20 @@ export class OutdoorWorkCard extends LitElement {
 
   private _renderWork(r: Resolved, t: Strings): TemplateResult {
     const res: WorkResult = planWork(this._weather!.hours, Date.now(), {
+      ...r.work,
       tz: r.tz,
       lat: r.lat,
       lon: r.lon,
-      weekdayStart: r.weekdayStart,
-      weekendStart: r.weekendStart,
-      windowEnd: r.windowEnd,
-      minWindowMinutes: r.minWindowMinutes,
-      rainThreshold: r.rainThreshold,
-      tasks: r.tasks,
       days: r.days,
       cap: CAP,
       names: r.names,
     });
-    const hero = workHero(res, r.tasks, this._ctx(r, t));
+    const hero = workHero(res, r.work.tasks, this._ctx(r, t));
 
     return html`
       <div class="hero ${hero.ok ? "ok" : "warn"}">
         <div class="pill"><span class="dot"></span>${hero.verdict}</div>
-        ${r.tasks.map((task, k) => {
+        ${r.work.tasks.map((task, k) => {
           const v = hero.tasks[k]!;
           return html` <div class="task">
             <div class="ico ${v.when ? "on" : "off"}">${taskIcon(task.name)(18)}</div>
@@ -680,7 +660,7 @@ export class OutdoorWorkCard extends LitElement {
   private _workRow(d: WorkDay, i: number, r: Resolved, t: Strings): TemplateResult {
     const acc = r.accent;
     const ctx = this._ctx(r, t);
-    const band = runwayBand(d.after, r.tasks);
+    const band = runwayBand(d.after, r.work.tasks);
     const runway = {
       full: acc,
       half: "var(--owc-amber)",
@@ -693,17 +673,17 @@ export class OutdoorWorkCard extends LitElement {
       short: "var(--owc-text-2)",
       none: "var(--owc-text-2)",
     }[band];
-    const cell = dryByCell(d, r.tasks);
+    const cell = dryByCell(d, r.work.tasks);
     const cellTxt = cell.all
       ? "✓"
-      : t.dryByCell(r.tasks[cell.task]!.name, dryTime(cell.at, d, ctx));
+      : t.dryByCell(r.work.tasks[cell.task]!.name, dryTime(cell.at, d, ctx));
     const cellColor = cell.all
       ? "var(--owc-accent-text)"
       : cell.soon
         ? "var(--owc-amber-text)"
         : "var(--owc-text-2)";
     const ref = d.effStart ?? d.start ?? d.dayStart;
-    const tipLines = dryByLines(d, r.tasks, ctx);
+    const tipLines = dryByLines(d, r.work.tasks, ctx);
     const anyOk = d.ok.some(Boolean);
     const pct = (h: number, max: number) => `${Math.max(5, Math.min(100, (h / max) * 100))}%`;
 
@@ -746,7 +726,7 @@ export class OutdoorWorkCard extends LitElement {
         >
       </div>
       <div class="pills">
-        ${r.tasks.map((task, k) => html`<span class="tp ${d.ok[k] ? "on" : "off"}">${task.name}</span>`)}
+        ${r.work.tasks.map((task, k) => html`<span class="tp ${d.ok[k] ? "on" : "off"}">${task.name}</span>`)}
       </div>
     </div>`;
   }
@@ -755,18 +735,12 @@ export class OutdoorWorkCard extends LitElement {
 
   private _renderWash(r: Resolved, t: Strings): TemplateResult {
     const res: WashResult = planWash(this._weather!.hours, Date.now(), {
+      ...r.wash,
       tz: r.tz,
-      washStart: r.washStart,
-      okRain: r.okRain,
-      dryRoadsHours: r.dryRoadsHours,
-      nightFrom: r.nightFrom,
-      nightUntil: r.nightUntil,
-      parked: r.parked,
-      workdays: r.workdays,
       days: r.days,
       names: r.names,
     });
-    const hero = washHero(res, fmt(r.washStart), this._ctx(r, t));
+    const hero = washHero(res, fmt(r.wash.washStart), this._ctx(r, t));
     const skip = hero.state === "rec";
     const tradeoff = hero.tradeoff?.map((seg) =>
       typeof seg === "string"

@@ -233,7 +233,7 @@ export function matchPreset(t: Thresholds): PresetId | "custom" {
 }
 
 /** English fallback fragments — mirrors the original hardcoded reason line. */
-const EN_PHRASES: CommutePhrases = {
+export const EN_PHRASES: CommutePhrases = {
   rain: "rain",
   lightRain: "light rain",
   strongWind: "strong wind",

@@ -7,6 +7,7 @@
  * All strings here are plain (no lit dependency) — the card assembles the HTML.
  */
 import type { HassLike } from "./types";
+import { EN_PHRASES, type CommutePhrases } from "./commute";
 
 export type Lang = "en" | "nb";
 
@@ -174,25 +175,8 @@ export interface Strings {
   outDays: (streak: number, open: boolean) => string;
 
   // --- commute mode ---
-  /** Fragments the reason line is built from (see CommutePhrases). */
-  cRain: string;
-  cLightRain: string;
-  cStrongWind: string;
-  cBreezy: string;
-  cCloudburst: string;
-  cDangerousGusts: string;
-  cLightSnow: string;
-  cSnow: string;
-  cHeavySnow: string;
-  cIcy: string;
-  cToWork: (what: string) => string;
-  cHome: (what: string) => string;
-  cAnd: string;
-  cSep: string;
-  cDryCalm: string;
-  cMiddayFlag: string;
-  cMiddayFlagSnow: string;
-  cNoData: string;
+  /** Fragments the commute reason line is built from. */
+  commute: CommutePhrases;
   cToday: string;
   cTomorrow: string;
   /** Hero captions and verdicts, indexed by traffic light 0/1/2. */
@@ -410,24 +394,7 @@ const EN: Strings = {
           : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
-  cRain: "rain",
-  cLightRain: "light rain",
-  cStrongWind: "strong wind",
-  cBreezy: "breezy",
-  cCloudburst: "cloudburst",
-  cDangerousGusts: "dangerous gusts",
-  cLightSnow: "light snow",
-  cSnow: "snow",
-  cHeavySnow: "heavy snow",
-  cIcy: "icy roads possible",
-  cToWork: (w) => `${w} to work`,
-  cHome: (w) => `${w} home`,
-  cAnd: " + ",
-  cSep: " · ",
-  cDryCalm: "dry and calm both ways",
-  cMiddayFlag: " · heavy rain midday — consider home office",
-  cMiddayFlagSnow: " · heavy snow midday — consider home office",
-  cNoData: "no forecast yet",
+  commute: EN_PHRASES,
   cToday: "Today",
   cTomorrow: "Tomorrow",
   cCaption: ["Good day to ride", "Rideable, with a catch", "Home office day"],
@@ -698,24 +665,26 @@ const NB: Strings = {
           : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
 
-  cRain: "regn",
-  cLightRain: "lett regn",
-  cStrongWind: "sterk vind",
-  cBreezy: "vindfullt",
-  cCloudburst: "styrtregn",
-  cDangerousGusts: "farlige vindkast",
-  cLightSnow: "lett snø",
-  cSnow: "snø",
-  cHeavySnow: "kraftig snø",
-  cIcy: "mulig glatte veier",
-  cToWork: (w) => `${w} til jobb`,
-  cHome: (w) => `${w} hjem`,
-  cAnd: " + ",
-  cSep: " · ",
-  cDryCalm: "tørt og vindstille begge veier",
-  cMiddayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
-  cMiddayFlagSnow: " · kraftig snø midt på dagen — vurder hjemmekontor",
-  cNoData: "ingen prognose ennå",
+  commute: {
+    rain: "regn",
+    lightRain: "lett regn",
+    strongWind: "sterk vind",
+    breezy: "vindfullt",
+    cloudburst: "styrtregn",
+    dangerousGusts: "farlige vindkast",
+    lightSnow: "lett snø",
+    snow: "snø",
+    heavySnow: "kraftig snø",
+    icy: "mulig glatte veier",
+    toWork: (w) => `${w} til jobb`,
+    home: (w) => `${w} hjem`,
+    and: " + ",
+    sep: " · ",
+    dryCalm: "tørt og vindstille begge veier",
+    middayFlag: " · kraftig regn midt på dagen — vurder hjemmekontor",
+    middayFlagSnow: " · kraftig snø midt på dagen — vurder hjemmekontor",
+    noData: "ingen prognose ennå",
+  },
   cToday: "I dag",
   cTomorrow: "I morgen",
   cCaption: ["Fin dag å sykle", "Syklbart, med en hake", "Hjemmekontordag"],

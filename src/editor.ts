@@ -328,7 +328,7 @@ export class OutdoorWorkCardEditor extends LitElement {
 
   /** Preset matching the effective (config or default) thresholds. */
   private _preset(c: CardConfig | undefined) {
-    return matchPreset(resolve(c ?? { type: "" }, this.hass));
+    return matchPreset(resolve(c ?? { type: "" }, this.hass).commute);
   }
 
   protected override render(): TemplateResult | typeof nothing {

@@ -296,7 +296,7 @@ test("preset matcher: each preset maps to its id, any change to custom", () => {
 
 test("resolver defaults equal the Everyday preset", () => {
   const r = resolve({ type: "custom:outdoor-work-card", mode: "commute" }, undefined);
-  expect(matchPreset(r)).toBe("everyday");
+  expect(matchPreset(r.commute)).toBe("everyday");
 });
 
 // ---------------------------------------------------------------------------
