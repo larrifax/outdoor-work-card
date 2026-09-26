@@ -1,6 +1,7 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
 import { parseHM } from "./time";
-import { PRESETS } from "./commute";
+import { PRESETS, type CommuteOptions } from "./commute";
+import type { WorkOptions, WashOptions } from "./logic";
 import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
 export function defaultTasks(t: ReturnType<typeof strings>): TaskConfig[] {
@@ -23,33 +24,26 @@ export interface Resolved {
   days: number;
   refreshMs: number;
   accent: string;
-  // work
-  weekdayStart: number;
-  weekendStart: number;
-  windowEnd: "dusk" | "sunset" | number;
-  minWindowMinutes: number;
-  rainThreshold: number;
-  tasks: TaskConfig[];
-  // wash
-  washStart: number;
-  okRain: number;
-  dryRoadsHours: number;
-  nightFrom: number;
-  nightUntil: number;
-  /** Parked-indoors window on workdays, null when not configured. */
-  parked: [number, number] | null;
-  // commute
-  toWork: [number, number];
-  home: [number, number];
-  midday: [number, number];
-  rainFine: number;
-  rainOk: number;
-  windFine: number;
-  windOk: number;
-  workdays: number[];
+  work: WorkConfig;
+  wash: WashConfig;
+  commute: CommuteConfig;
+}
+
+/** Each mode's settings, shaped as its planner's options minus what the card adds (tz, days, names…). */
+export type WorkConfig = Pick<
+  WorkOptions,
+  "weekdayStart" | "weekendStart" | "windowEnd" | "minWindowMinutes" | "rainThreshold" | "tasks"
+>;
+/** `workdays` = days the parked window applies to. */
+export type WashConfig = Omit<WashOptions, "tz" | "days" | "names">;
+/** `workdays` = days shown. */
+export type CommuteConfig = Pick<
+  CommuteOptions,
+  "toWork" | "home" | "midday" | "rainFine" | "rainOk" | "windFine" | "windOk" | "workdays"
+> & {
   /** Winter-tyres entity id, "" when unset. */
   winterTyresEntity: string;
-}
+};
 
 /** Unknown or missing mode falls back to work. */
 export const parseMode = (m: unknown): Mode => (m === "carwash" || m === "commute" ? m : "work");
@@ -149,27 +143,34 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
     days: Math.round(num(c.days, 7, 3, 10)),
     refreshMs: num(c.refresh_minutes, 60, 10, 720) * 60_000,
     accent: c.accent || (mode === "carwash" ? "#38bdf8" : "#34d399"),
-    weekdayStart: parseHM(c.weekday_start, "18:00"),
-    weekendStart: parseHM(c.weekend_start, "10:00"),
-    windowEnd,
-    minWindowMinutes: num(c.min_window_minutes, 45, 0, 600),
-    rainThreshold: num(c.rain_threshold, 0.2, 0, 10),
-    tasks,
-    washStart: parseHM(c.wash_start, "18:00"),
-    okRain: num(c.ok_rain, 0.2, 0, 5),
-    dryRoadsHours: num(c.dry_roads_hours, 3, 0, 24),
-    nightFrom: parseHM(c.night_from, "22:00"),
-    nightUntil: parseHM(c.night_until, "06:00"),
-    parked: parkedWindow(c.parked_start, c.parked_end),
-    toWork,
-    home,
-    midday,
-    rainFine,
-    rainOk: Math.max(rainFine, num(c.rain_ok, def.rainOk, 0, 20)),
-    windFine,
-    windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
-    workdays,
-    winterTyresEntity:
-      typeof c.winter_tyres_entity === "string" ? c.winter_tyres_entity.trim() : "",
+    work: {
+      weekdayStart: parseHM(c.weekday_start, "18:00"),
+      weekendStart: parseHM(c.weekend_start, "10:00"),
+      windowEnd,
+      minWindowMinutes: num(c.min_window_minutes, 45, 0, 600),
+      rainThreshold: num(c.rain_threshold, 0.2, 0, 10),
+      tasks,
+    },
+    wash: {
+      washStart: parseHM(c.wash_start, "18:00"),
+      okRain: num(c.ok_rain, 0.2, 0, 5),
+      dryRoadsHours: num(c.dry_roads_hours, 3, 0, 24),
+      nightFrom: parseHM(c.night_from, "22:00"),
+      nightUntil: parseHM(c.night_until, "06:00"),
+      parked: parkedWindow(c.parked_start, c.parked_end),
+      workdays,
+    },
+    commute: {
+      toWork,
+      home,
+      midday,
+      rainFine,
+      rainOk: Math.max(rainFine, num(c.rain_ok, def.rainOk, 0, 20)),
+      windFine,
+      windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
+      workdays,
+      winterTyresEntity:
+        typeof c.winter_tyres_entity === "string" ? c.winter_tyres_entity.trim() : "",
+    },
   };
 }

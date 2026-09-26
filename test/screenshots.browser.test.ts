@@ -192,6 +192,12 @@ for (const theme of ["dark", "light"] as const) {
     expect(cRoot.querySelectorAll(".tile.icy").length).toBe(3);
     expect(cRoot.querySelector(".tile.icy .tip")?.textContent).toContain("wet earlier");
 
+    // Every card's visible text + tooltips: refactors must not change what the card says.
+    const text = [...cards].map((c) =>
+      (c.shadowRoot!.textContent ?? "").replace(/\s+/g, " ").trim(),
+    );
+    expect(text).toMatchSnapshot();
+
     await page.screenshot({ element: host, path: `__screenshots__/cards-${theme}.png` });
   });
 }

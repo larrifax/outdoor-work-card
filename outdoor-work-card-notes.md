@@ -40,7 +40,7 @@ Runway bars colour by the strictest configured requirement: green when met, ambe
 
 An hour is _bad_ for a clean car when it is a **night hour** (default 22:00–06:00) with more than `night_max` (default 4 mm/h), or a **day hour** with more than `ok_rain` (default 0.5 mm/h). A day is _tolerated_ when none of its hours are bad.
 
-The **streak from evening s** = 1 (the wash day itself, judged from wash time onward) + the number of consecutive following days that are tolerated. If the streak runs past the end of the evaluated days it is shown as `N+` ("at least N"). The card evaluates three days beyond the displayed range so streaks can extend past the visible week.
+The **streak from evening s** = the number of consecutive following days that are tolerated; the wash day itself is not counted (the car is dry in the garage overnight), but it must be washable from wash time onward. If the streak runs past the end of the evaluated days it is shown as `N+` ("at least N"). The card evaluates three days beyond the displayed range so streaks can extend past the visible week.
 
 **Wet-roads lead** (`dry_roads_hours`, default 2): bad rain within this many hours before wash time rules the evening out, so you are not driving a freshly washed car on wet roads. This came out of testing: rain at 13:00 legitimately does not stop an 18:00 wash, but rain ending at 17:40 should. Days whose disqualifying rain falls entirely before wash time are labelled _earlier_ in the strip (rather than _daytime_) so a recommended "best" evening with a morning shower reads correctly.
 

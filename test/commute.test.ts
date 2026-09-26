@@ -5,7 +5,12 @@ import {
   PRESETS,
   summerTyres,
   winterTyresFrom,
+  icyWatch,
+  gradeDay,
+  rainLevel,
+  snowLevel,
   type CommuteOptions,
+  type Level,
 } from "../src/commute";
 import { resolve } from "../src/config";
 import type { HourPoint } from "../src/types";
@@ -296,7 +301,7 @@ test("preset matcher: each preset maps to its id, any change to custom", () => {
 
 test("resolver defaults equal the Everyday preset", () => {
   const r = resolve({ type: "custom:outdoor-work-card", mode: "commute" }, undefined);
-  expect(matchPreset(r)).toBe("everyday");
+  expect(matchPreset(r.commute)).toBe("everyday");
 });
 
 // ---------------------------------------------------------------------------
@@ -438,4 +443,31 @@ test("tyre entity: on = winter, off = summer, anything else falls back to the gu
   expect(winterTyresFrom("on")).toBe(true);
   expect(winterTyresFrom("off")).toBe(false);
   for (const s of [undefined, "unavailable", "unknown"]) expect(winterTyresFrom(s)).toBe(null);
+});
+
+test("icy watch: tyre entity wins, else the weather guess", () => {
+  expect(icyWatch(true, true)).toBe(false);
+  expect(icyWatch(false, false)).toBe(true);
+  expect(icyWatch(null, true)).toBe(true);
+});
+
+test("day grade: A–F table over both commute levels", () => {
+  const g = (s: string) => gradeDay(+s[0]! as Level, +s[1]! as Level);
+  expect(["00", "01", "10", "11", "02", "12", "22", "03", "30"].map(g)).toEqual([
+    "A",
+    "B",
+    "B",
+    "C",
+    "D",
+    "D",
+    "E",
+    "F",
+    "F",
+  ]);
+});
+
+test("level bands: rider thresholds, fixed danger and snow scales", () => {
+  const t = PRESETS.everyday;
+  expect([0.2, 0.3, 0.8, 0.9, 8.1].map((mm) => rainLevel(mm, t))).toEqual([0, 1, 1, 2, 3]);
+  expect([0, 0.5, 0.6, 3.1].map(snowLevel)).toEqual([0, 1, 2, 3]);
 });
