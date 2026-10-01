@@ -32,7 +32,7 @@ const save = (key: string, v: unknown) => {
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const lat = $<HTMLInputElement>("lat");
 const lon = $<HTMLInputElement>("lon");
-const loc = load("pg-loc", { lat: 59.91, lon: 10.75 });
+let loc = load("pg-loc", { lat: 59.91, lon: 10.75 });
 lat.value = String(loc.lat);
 lon.value = String(loc.lon);
 
@@ -49,7 +49,7 @@ const hass = () => ({
 function render() {
   const root = $("cards");
   root.replaceChildren();
-  const configs = load<object[]>("pg-configs", DEFAULTS);
+  const configs = load<object[]>("pg-configs", structuredClone(DEFAULTS));
   configs.forEach((cfg, i) => {
     const slot = document.createElement("div");
     slot.className = "slot";
@@ -90,7 +90,15 @@ function mount(cfg: object): CardEl {
 
 for (const input of [lat, lon])
   input.addEventListener("change", () => {
-    save("pg-loc", { lat: parseFloat(lat.value), lon: parseFloat(lon.value) });
+    const next = { lat: parseFloat(lat.value), lon: parseFloat(lon.value) };
+    if (!Number.isFinite(next.lat) || !Number.isFinite(next.lon)) {
+      // Revert so hass() never sees NaN (config.ts's ?? fallback lets it through).
+      lat.value = String(loc.lat);
+      lon.value = String(loc.lon);
+      return;
+    }
+    loc = next;
+    save("pg-loc", loc);
     render();
   });
 $("theme").addEventListener("click", () => {
