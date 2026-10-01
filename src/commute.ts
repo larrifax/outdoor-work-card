@@ -23,12 +23,18 @@ export type Level = 0 | 1 | 2 | 3;
 /** Traffic light: 0 green, 1 amber, 2 red */
 export type Light = 0 | 1 | 2;
 export type Grade = "A" | "B" | "C" | "D" | "E" | "F";
+export type WindDir = "head" | "cross" | "tail";
 
 // ponytail: fixed constants. Upgrade path: make configurable if riders ask.
 /** Effective wind = max(mean, gust × GUST_FACTOR). Inland gust factors run ~1.5–1.7, so in steady wind this equals the mean. */
 export const GUST_FACTOR = 0.6;
 /** Dangerous regardless of rider thresholds: effective wind above this (m/s, ≈ gusts > 23 m/s)… */
 export const DANGER_WIND = 14;
+// ponytail: straight-line heading home → work, linear head/tail weighting. Ceiling: winding routes; upgrade to a waypoint list weighted by segment length if riders ask.
+/** With a commute bearing, wind for the fine/ok bands = eff × (1 + HEAD_FACTOR × cos θ), θ = angle between where the wind comes from and where you ride: full headwind ×1.4, crosswind ×1, tailwind ×0.6. Danger stays on the undirected wind (gusts knock you over from any side). */
+export const HEAD_FACTOR = 0.4;
+/** |cos θ| below this reads as crosswind in hints. */
+const CROSS_COS = 0.5;
 /** …or rain above this (mm/h, cloudburst). */
 export const DANGER_RAIN = 8;
 /** Midday flag: one hour above rainOk, or a midday total above this many × rainOk. */
@@ -111,6 +117,8 @@ export interface CommuteOptions {
   tomorrow?: string;
   /** Localized fragments for the reason line. */
   phrases?: CommutePhrases;
+  /** Degrees (0 = N, clockwise) from home to work; the ride home uses the reverse. Absent → wind direction is ignored. */
+  bearing?: number;
   /** Rider is on summer tyres: evaluate the slippery-roads marker. Default false. */
   icyWatch?: boolean;
 }
@@ -134,6 +142,10 @@ export interface HourCell {
   gust: number;
   /** effective wind, m/s: max(mean, gust × GUST_FACTOR) */
   eff: number;
+  /** wind the rider feels, m/s: `eff` weighted by head-/tailwind (== eff without a bearing or direction) */
+  feel: number;
+  /** "head" | "cross" | "tail", null without a bearing or direction */
+  dir: WindDir | null;
   /** level of the rain part (precipitation minus snow water) */
   rain: Level;
   snowLevel: Level;
@@ -267,9 +279,24 @@ export function gradeDay(toWork: Level, home: Level): Grade {
 /** Rain part, mm/h → level on the rider's thresholds (above DANGER_RAIN is always dangerous). */
 export const rainLevel = (mm: number, t: Thresholds): Level =>
   mm > DANGER_RAIN ? 3 : mm <= t.rainFine ? 0 : mm <= t.rainOk ? 1 : 2;
-/** Effective wind, m/s → level. */
-export const windLevel = (w: number, t: Thresholds): Level =>
-  w > DANGER_WIND ? 3 : w <= t.windFine ? 0 : w <= t.windOk ? 1 : 2;
+/** Felt wind, m/s → level; `raw` (undirected effective wind) decides danger. */
+export const windLevel = (w: number, t: Thresholds, raw = w): Level =>
+  raw > DANGER_WIND ? 3 : w <= t.windFine ? 0 : w <= t.windOk ? 1 : 2;
+
+/** Initial great-circle bearing from a to b, degrees 0–360 (0 = N). */
+export function bearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = Math.PI / 180;
+  const dl = (lon2 - lon1) * r;
+  const y = Math.sin(dl) * Math.cos(lat2 * r);
+  const x =
+    Math.cos(lat1 * r) * Math.sin(lat2 * r) -
+    Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos(dl);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+
+/** Wind from `from`° on a rider heading `heading`°: cos θ (1 = headwind, −1 = tailwind). */
+export const headCos = (from: number, heading: number): number =>
+  Math.cos(((from - heading) * Math.PI) / 180);
 /** Snowfall, cm/h → level on the fixed snow scale. */
 export const snowLevel = (cm: number): Level =>
   cm <= 0 ? 0 : cm > DANGER_SNOW ? 3 : cm <= SNOW_OK ? 1 : 2;
@@ -343,16 +370,20 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     return false;
   };
 
-  const cellAt = (t: number): HourCell => {
+  const cellAt = (t: number, heading: number | undefined): HourCell => {
     const p = byT.get(t);
     const lp = localParts(t, o.tz);
     const s = split(p);
     const wind = p?.wind ?? 0;
     const gust = p?.gust ?? wind;
     const eff = Math.max(wind, gust * GUST_FACTOR);
+    const cos = heading == null || p?.windDir == null ? null : headCos(p.windDir, heading);
+    const feel = cos === null ? eff : eff * (1 + HEAD_FACTOR * cos);
+    const dir: WindDir | null =
+      cos === null ? null : cos >= CROSS_COS ? "head" : cos <= -CROSS_COS ? "tail" : "cross";
     const rain = rainLevel(s.rain, o);
     const sl = snowLevel(s.snow);
-    const wl = windLevel(eff, o);
+    const wl = windLevel(feel, o, eff);
     return {
       t,
       label: hh(lp.h),
@@ -363,6 +394,8 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
       wind,
       gust,
       eff,
+      feel,
+      dir,
       rain,
       snowLevel: sl,
       windLevel: wl,
@@ -373,11 +406,17 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     };
   };
 
-  const windowFor = (y: number, m: number, d: number, [a, b]: [number, number]): CommuteWindow => {
+  const windowFor = (
+    y: number,
+    m: number,
+    d: number,
+    [a, b]: [number, number],
+    heading: number | undefined,
+  ): CommuteWindow => {
     const cells: HourCell[] = [];
     // Every hour the window touches: 07:45–08:15 → hours 07 and 08.
     for (let h = Math.floor(a / 60); h * 60 < b; h++)
-      cells.push(cellAt(zonedToUtc(y, m, d, h, 0, o.tz)));
+      cells.push(cellAt(zonedToUtc(y, m, d, h, 0, o.tz), heading));
     const rain = cells.reduce<Level>((acc, c) => worse(acc, c.rain), 0);
     const snow = cells.reduce<Level>((acc, c) => worse(acc, c.snowLevel), 0);
     const wind = cells.reduce<Level>((acc, c) => worse(acc, c.windLevel), 0);
@@ -442,8 +481,14 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const done = i === 0 && now >= zonedMin(p, o.home[1], o.tz);
     if (!done) kept++;
 
-    const toWork = windowFor(p.y, p.m, p.d, o.toWork);
-    const home = windowFor(p.y, p.m, p.d, o.home);
+    const toWork = windowFor(p.y, p.m, p.d, o.toWork, o.bearing);
+    const home = windowFor(
+      p.y,
+      p.m,
+      p.d,
+      o.home,
+      o.bearing == null ? undefined : (o.bearing + 180) % 360,
+    );
 
     const grade = gradeDay(toWork.level, home.level);
     const midday = middayFor(p.y, p.m, p.d, o.midday, grade);

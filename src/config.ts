@@ -1,6 +1,6 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
 import { parseHM, hh } from "./time";
-import { PRESETS, type CommuteOptions } from "./commute";
+import { PRESETS, bearing, type CommuteOptions } from "./commute";
 import type { WorkOptions, WashOptions } from "./logic";
 import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
 
@@ -39,7 +39,15 @@ export type WashConfig = Omit<WashOptions, "tz" | "days" | "names">;
 /** `workdays` = days shown. */
 export type CommuteConfig = Pick<
   CommuteOptions,
-  "toWork" | "home" | "midday" | "rainFine" | "rainOk" | "windFine" | "windOk" | "workdays"
+  | "toWork"
+  | "home"
+  | "midday"
+  | "rainFine"
+  | "rainOk"
+  | "windFine"
+  | "windOk"
+  | "workdays"
+  | "bearing"
 > & {
   /** Winter-tyres entity id, "" when unset. */
   winterTyresEntity: string;
@@ -63,6 +71,15 @@ const parkedWindow = (a: unknown, b: unknown): [number, number] | null => {
   const s = parseHM(a, "00:00");
   const e = parseHM(b, "00:00");
   return s === e ? null : [s, e];
+};
+
+/** Home → work bearing when both work coordinates are valid and not on top of home, else undefined. */
+const commuteBearing = (lat: number, lon: number, wlat: unknown, wlon: unknown) => {
+  const a = num(wlat, NaN);
+  const b = num(wlon, NaN);
+  if (!(Math.abs(a) <= 90 && Math.abs(b) <= 180)) return undefined;
+  if (Math.abs(a - lat) < 1e-4 && Math.abs(b - lon) < 1e-4) return undefined;
+  return bearing(lat, lon, a, b);
 };
 
 export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
@@ -168,6 +185,7 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
       windFine,
       windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
       workdays,
+      bearing: commuteBearing(lat, lon, c.work_latitude, c.work_longitude),
       winterTyresEntity:
         typeof c.winter_tyres_entity === "string" ? c.winter_tyres_entity.trim() : "",
     },

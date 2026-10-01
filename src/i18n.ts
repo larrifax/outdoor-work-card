@@ -232,6 +232,12 @@ export interface Strings {
   popDanger: string;
   popDangerLine: (rain: number, wind: number) => string;
   popEffWind: (pct: number) => string;
+  /** Rules note with a commute bearing (degrees home → work) and head/tail weight (%). */
+  popRoute: (deg: number, pct: number) => string;
+  /** Rules note without work coordinates. */
+  popNoRoute: string;
+  /** Tile hint suffix per wind direction relative to the ride. */
+  cWindDir: Record<"head" | "cross" | "tail", string>;
   popSnowUnit: string;
   popSnowLabel: string;
   popSnowLine: (ok: number, danger: number) => string;
@@ -450,6 +456,10 @@ const EN: Strings = {
     `Dangerous: rain above ${rain} mm/h or effective wind above ${wind} m/s, whatever your thresholds.`,
   popEffWind: (pct) =>
     `Effective wind is the mean, or ${pct}% of the gust speed when gusts are unusually strong.`,
+  popRoute: (deg, pct) =>
+    `Riding ${deg}° to work (straight line, reversed home): headwind counts up to ${pct}% more, tailwind ${pct}% less. Danger ignores direction.`,
+  popNoRoute: "Set work_latitude / work_longitude to weigh headwind and tailwind.",
+  cWindDir: { head: "headwind", cross: "crosswind", tail: "tailwind" },
   popSnowUnit: "snowfall, cm/h (when snow dominates)",
   popSnowLabel: "snow",
   popSnowLine: (ok, danger) =>
@@ -524,6 +534,8 @@ const EN: Strings = {
       workdays: "Commute days",
       parked_days: "Parked on",
       winter_tyres_entity: "Winter tyres entity",
+      work_latitude: "Work latitude",
+      work_longitude: "Work longitude",
     },
     helpers: {
       rain_threshold:
@@ -542,6 +554,8 @@ const EN: Strings = {
       parked_days: "Days the parked window applies.",
       winter_tyres_entity:
         "On = winter tyres (no icy-road badges). Leave empty to guess from recent weather.",
+      work_latitude:
+        "Optional: with home = the card location, wind is judged as head-, cross- or tailwind on the straight line between them.",
     },
     noteTasks1: "Activities default to ",
     noteTasks2: " (≤ 0.3 mm wet) and ",
@@ -743,6 +757,10 @@ const NB: Strings = {
     `Farlig: regn over ${rain} mm/t eller effektiv vind over ${wind} m/s, uansett dine terskler.`,
   popEffWind: (pct) =>
     `Effektiv vind er middelvinden, eller ${pct} % av kastene når de er uvanlig kraftige.`,
+  popRoute: (deg, pct) =>
+    `Du sykler ${deg}° til jobb (rett linje, motsatt hjem): motvind teller opptil ${pct} % mer, medvind ${pct} % mindre. Fare ser bort fra retning.`,
+  popNoRoute: "Sett work_latitude / work_longitude for å vekte motvind og medvind.",
+  cWindDir: { head: "motvind", cross: "sidevind", tail: "medvind" },
   popSnowUnit: "snøfall, cm/t (når snø dominerer)",
   popSnowLabel: "snø",
   popSnowLine: (ok, danger) =>
@@ -817,6 +835,8 @@ const NB: Strings = {
       workdays: "Pendledager",
       parked_days: "Parkert på",
       winter_tyres_entity: "Vinterdekk-entitet",
+      work_latitude: "Jobb breddegrad",
+      work_longitude: "Jobb lengdegrad",
     },
     helpers: {
       rain_threshold:
@@ -835,6 +855,8 @@ const NB: Strings = {
       parked_days: "Dager parkeringsvinduet gjelder.",
       winter_tyres_entity:
         "På = vinterdekk (ingen glatt-vei-merker). La stå tom for å gjette ut fra været.",
+      work_latitude:
+        "Valgfritt: med hjem = kortets posisjon vurderes vinden som mot-, side- eller medvind på rett linje mellom dem.",
     },
     noteTasks1: "Aktiviteter er som standard ",
     noteTasks2: " (≤ 0,3 mm fukt) og ",

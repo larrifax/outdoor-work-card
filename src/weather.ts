@@ -13,6 +13,7 @@ const HOURLY = [
   "precipitation",
   "wind_speed_10m",
   "wind_gusts_10m",
+  "wind_direction_10m",
   "et0_fao_evapotranspiration",
   "snowfall",
   "temperature_2m",
@@ -87,6 +88,7 @@ export function parseHourly(json: OpenMeteoJson, now: number): HourPoint[] {
   const mm: (number | null)[] = json.hourly?.precipitation ?? [];
   const ws: (number | null)[] = json.hourly?.wind_speed_10m ?? [];
   const wg: (number | null)[] = json.hourly?.wind_gusts_10m ?? [];
+  const wd: (number | null)[] = json.hourly?.wind_direction_10m ?? [];
   // Missing ET0 counts as 0: never dry faster than the data says.
   const et: (number | null)[] = json.hourly?.et0_fao_evapotranspiration ?? [];
   const sf: (number | null)[] = json.hourly?.snowfall ?? [];
@@ -100,6 +102,7 @@ export function parseHourly(json: OpenMeteoJson, now: number): HourPoint[] {
       mm: mm[i] ?? 0,
       wind,
       gust: wg[i] ?? wind,
+      windDir: wd[i] ?? null,
       et0: et[i] ?? 0,
       snow: sf[i] ?? 0,
       temp: tc[i] ?? null,
