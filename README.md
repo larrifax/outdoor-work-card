@@ -188,11 +188,13 @@ Why not call `api.met.no` directly? MET asks browser clients to identify themsel
 ## Develop
 
 ```bash
-npm install
-npm run build          # → dist/outdoor-work-card.js
-npm test               # logic tests (node:test) — run `npx rollup -c rollup.test.config.mjs` first
-node test/shoot.mjs    # renders test/harness.html with mocked weather → test/shot-*.png
+pnpm install
+pnpm dev               # playground: live cards outside HA, hot reload
+pnpm build             # → dist/outdoor-work-card.js
+pnpm test              # unit tests + browser screenshot/text snapshots (vitest, Playwright)
 ```
+
+`pnpm dev` opens `playground/` with one card per mode, fed live Open-Meteo data and a fake `hass` (your browser's time zone). Edit each card's JSON config below it; edits and the lat/lon persist in the browser.
 
 `src/logic.ts` is pure and has no DOM dependency — the planning rules live there. `src/outdoor-work-card.ts` renders; `src/editor.ts` is the `ha-form` based visual editor.
 

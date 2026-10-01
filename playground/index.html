@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Card Playground</title>
+    <style>
+      :root {
+        --primary-text-color: #e8eaed;
+        --secondary-text-color: #9aa2ad;
+        --divider-color: rgba(255, 255, 255, 0.08);
+        --ha-card-background: #171b24;
+        --ha-card-border-radius: 16px;
+        --bg: #0d1117;
+        color-scheme: dark;
+      }
+      :root[data-theme="light"] {
+        --primary-text-color: #1c1c1e;
+        --secondary-text-color: #5f6570;
+        --divider-color: rgba(0, 0, 0, 0.08);
+        --ha-card-background: #ffffff;
+        --bg: #f2f3f5;
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--primary-text-color);
+        font-family: Roboto, system-ui, sans-serif;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      #cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(480px, 100%), 1fr));
+        gap: 24px;
+      }
+      .slot {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 120px;
+        font:
+          12px ui-monospace,
+          Menlo,
+          monospace;
+        background: var(--ha-card-background);
+        color: inherit;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 8px;
+      }
+      textarea.bad {
+        border-color: #ef6b6b;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Outdoor Work Card playground</strong>
+      <label>Lat <input id="lat" size="7" /></label>
+      <label>Lon <input id="lon" size="7" /></label>
+      <button id="theme">Toggle theme</button>
+      <button id="reset">Reset configs</button>
+      <small>Config edits apply on valid JSON and persist in this browser.</small>
+    </header>
+    <div id="cards"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
