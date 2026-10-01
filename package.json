@@ -11,6 +11,7 @@
   "type": "module",
   "main": "dist/outdoor-work-card.js",
   "scripts": {
+    "dev": "vite --open /playground/",
     "build": "vite build",
     "watch": "vite build --watch",
     "typecheck": "tsc --noEmit",
