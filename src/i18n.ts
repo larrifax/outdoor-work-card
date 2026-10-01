@@ -173,6 +173,8 @@ export interface Strings {
   /** Day hint; `time` = first wet driving hour (wetWhileDriving only), `salted` = roads were salted then. */
   washInfo: (kind: WashKind, time: string, salted?: boolean) => string;
   outDays: (streak: number, open: boolean) => string;
+  /** Legend under the day hint's 24-hour road strip. */
+  roadKey: string;
 
   // --- commute mode ---
   /** Fragments the commute reason line is built from. */
@@ -194,6 +196,8 @@ export interface Strings {
   cNoDays: string;
   cNextWeek: string;
   cOutlook: string;
+  /** note on today's row once the home window is over */
+  cDone: string;
   // column headers — cColToWork/cColHome take "HH"–"HH" strings
   cColDay: string;
   cColGrade: string;
@@ -393,6 +397,7 @@ const EN: Strings = {
           ? `Salted roads wet while you drive from ${time}.`
           : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
+  roadKey: "00–24 · red wet · amber salted · faded not driving",
 
   commute: EN_PHRASES,
   cToday: "Today",
@@ -409,6 +414,7 @@ const EN: Strings = {
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
   cOutlook: "outlook",
+  cDone: "done",
   cColDay: "Day",
   cColGrade: "Grade",
   cColToWork: (a, b) => `To work ${a}–${b}`,
@@ -664,6 +670,7 @@ const NB: Strings = {
           ? `Saltede veier våte mens du kjører fra ${time}.`
           : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
+  roadKey: "00–24 · rød våt · gul saltet · blek kjører ikke",
 
   commute: {
     rain: "regn",
@@ -699,6 +706,7 @@ const NB: Strings = {
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
   cOutlook: "utsikter",
+  cDone: "ferdig",
   cColDay: "Dag",
   cColGrade: "Karakter",
   cColToWork: (a, b) => `Til jobb ${a}–${b}`,

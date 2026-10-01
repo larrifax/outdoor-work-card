@@ -638,6 +638,31 @@ export const styles = css`
     font-size: 15px;
     font-weight: 600;
   }
+  .tip .road {
+    display: flex;
+    gap: 1px;
+    margin-top: 6px;
+  }
+  .tip .road i {
+    width: 7px;
+    height: 10px;
+    border-radius: 2px;
+    background: color-mix(in srgb, currentColor 25%, transparent);
+  }
+  .tip .road i.wet {
+    background: var(--owc-red);
+  }
+  .tip .road i.salt {
+    background: var(--owc-amber);
+  }
+  .tip .road i.off {
+    opacity: 0.35;
+  }
+  .tip .roadkey {
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.75;
+  }
   .tip::after {
     content: "";
     position: absolute;

@@ -461,7 +461,7 @@ export class OutdoorWorkCard extends LitElement {
   }
 
   private _commuteView(r: Resolved, t: Strings, res: CommuteResult): TemplateResult {
-    const first = res.days[0];
+    const first = res.days.find((d) => !d.done);
     if (!first)
       return html`<div class="state">
         ${icons.info(16)}
@@ -514,10 +514,12 @@ export class OutdoorWorkCard extends LitElement {
 
   private _commuteRow(d: CommuteDay, t: Strings): TemplateResult {
     return html`
-      <div class=${classMap({ cgrid: true, crow: true, today: d.isToday, far: d.far })}>
+      <div
+        class=${classMap({ cgrid: true, crow: true, today: d.isToday, far: d.far, done: d.done })}
+      >
         <div class="cell l">
           <span class="dn">${d.short}</span><span class="dd">${d.dom}</span>
-          ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : nothing}
+          ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : d.done ? html`<span class="nt">${t.cDone}</span>` : nothing}
         </div>
         <div
           class=${classMap({
@@ -841,7 +843,20 @@ export class OutdoorWorkCard extends LitElement {
         <span class="mm ${d.clean ? "" : "bad"}">${mm}</span>
         <span class="when">${when}</span>
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
-          >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz), d.salted)}</span
+          >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz), d.salted)}
+          ${
+            d.road.length
+              ? html`<div class="road">
+                    ${d.road.map(
+                      (c) =>
+                        html`<i
+                          class=${classMap({ wet: c.wet, salt: c.salted, off: !c.driving })}
+                        ></i>`,
+                    )}
+                  </div>
+                  <div class="roadkey">${t.roadKey}</div>`
+              : nothing
+          }</span
         >
       </div>
       <div

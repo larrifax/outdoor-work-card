@@ -323,6 +323,17 @@ export interface WashDay extends DayBase {
   /** When the roads dry after the day's last wet hour (UTC ms), null if never wet or never dry in data. */
   dryAt: number | null;
   icon: WashIcon;
+  /** Road state per local hour of the day, for judging the verdict against the day. */
+  road: RoadCell[];
+}
+
+/** One hour of a wash day's road strip. */
+export interface RoadCell {
+  t: number;
+  wet: boolean;
+  /** wet only because the roads were salted */
+  salted: boolean;
+  driving: boolean;
 }
 
 export interface WashResult {
@@ -435,6 +446,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     wetFrom: number | null;
     salted: boolean;
     dryAt: number | null;
+    road: RoadCell[];
   };
   const info: Info[] = base.map((b) => {
     const dayEnd = b.dayStart + 24 * H;
@@ -448,9 +460,12 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     let wetFrom: number | null = null;
     let saltedWet = false;
     let lastWet = -1;
+    const cells: RoadCell[] = [];
     hours.forEach((h, i) => {
       if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
       hasData = true;
+      const r = road[i]!;
+      cells.push({ t: h.t, wet: r.wet, salted: r.saltWet, driving: r.driving });
       peak = Math.max(peak, h.mm);
       if (road[i]!.wet) lastWet = i;
       if (!dirtyAt(i)) return;
@@ -467,7 +482,17 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       dryAt = j >= 0 ? hours[j]!.t : null;
     }
     if (!hasData) clean = eveningClean = false;
-    return { clean, eveningClean, peak, hasData, evening, wetFrom, salted: saltedWet, dryAt };
+    return {
+      clean,
+      eveningClean,
+      peak,
+      hasData,
+      evening,
+      wetFrom,
+      salted: saltedWet,
+      dryAt,
+      road: cells,
+    };
   });
 
   const nextDirtyFrom = (s: number): DirtyStretch | null => {
@@ -507,6 +532,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       salted: inf.salted,
       dryAt: inf.dryAt,
       icon,
+      road: inf.road,
     };
   });
 

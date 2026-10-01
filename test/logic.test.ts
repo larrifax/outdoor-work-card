@@ -260,6 +260,17 @@ test("wash: six hours of 0.3 mm drizzle keep roads wet through the stretch and u
   expect(thu.eveningClean).toBe(true);
 });
 
+test("wash: each day carries a 24-hour road strip", () => {
+  const r = planWash(series([["2026-09-17T08:00", 1.0]]), NOW, WASH);
+  const thu = r.days.find((d) => d.key === "2026-09-17")!;
+  expect(thu.road).toHaveLength(24);
+  const at = (hh: number) => thu.road[hh]!;
+  expect(at(7).wet).toBe(false);
+  expect([8, 9, 10].map((h) => at(h).wet)).toEqual([true, true, true]);
+  expect(at(11).wet).toBe(false);
+  expect(at(23).driving).toBe(false); // night
+});
+
 test("wash: roads dry at half speed overnight — 02:00 rain is still wet at 06:00, 01:00 rain is not", () => {
   const late = planWash(series([["2026-09-17T02:00", 1.0]]), NOW, WASH);
   expect(late.days[1].icon).toBe("rain");
