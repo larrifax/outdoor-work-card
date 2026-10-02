@@ -9,6 +9,7 @@
 import type { HassLike } from "./types";
 import type { RoadRun } from "./logic";
 import { EN_PHRASES, type CommutePhrases } from "./commute";
+import { hh } from "./time";
 
 export type Lang = "en" | "nb";
 
@@ -32,7 +33,6 @@ export interface DayNames {
 export type Seg = string | { b: string; gain?: boolean };
 
 const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const hh = (h: number) => String(h).padStart(2, "0");
 /** "Wet 06–11 · salted 14–16": end-exclusive local hours. */
 const runText = (runs: RoadRun[], wet: string, salted: string) =>
   cap1(runs.map((r) => `${r.salted ? salted : wet} ${hh(r.from)}–${hh(r.to)}`).join(" · "));

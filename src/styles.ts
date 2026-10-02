@@ -658,8 +658,9 @@ export const styles = css`
     display: flex;
     gap: 1px;
   }
+  /* 24 × 6 + 20 + 3 × 5 = 179px (185 on 25-hour days), inside the tip's 196px content box */
   .tip .road i {
-    width: 7px;
+    width: 6px;
     height: 10px;
     border-radius: 2px;
     background: color-mix(in srgb, currentColor 25%, transparent);
@@ -890,6 +891,9 @@ export const styles = css`
   }
   .crow.far {
     opacity: 0.72;
+  }
+  .crow.done {
+    opacity: 0.55;
   }
   .crow .dn {
     font-size: 13px;

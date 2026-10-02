@@ -279,7 +279,7 @@ test("wash: each day carries a 24-hour road strip", () => {
 
 test("wash: road runs split on salted state, end-exclusive, cut at midnight", () => {
   const cell = (h: number, wet: boolean, salted = false): RoadCell => ({
-    t: h,
+    t: h * H,
     h,
     wet,
     salted,
@@ -296,6 +296,37 @@ test("wash: road runs split on salted state, end-exclusive, cut at midnight", ()
   ]);
   expect(strings("en").roadRuns(runs)).toBe("Wet 06–11 · salted 14–16 · wet 16–24");
   expect(strings("nb").roadRuns(runs)).toBe("Våt 06–11 · saltet 14–16 · våt 16–24");
+});
+
+test("wash: road runs end an hour after the last cell — data end, gaps, DST repeat", () => {
+  const c = (t: number, h: number): RoadCell => ({ t, h, wet: true, salted: false, driving: true });
+  // data stops at 13:00
+  expect(roadRuns([c(12 * H, 12), c(13 * H, 13)])).toEqual([{ from: 12, to: 14, salted: false }]);
+  // missing hours split the run
+  expect(roadRuns([c(5 * H, 5), c(9 * H, 9)])).toEqual([
+    { from: 5, to: 6, salted: false },
+    { from: 9, to: 10, salted: false },
+  ]);
+  // fall-back: first 02:00 wet, second dry
+  const dry = { ...c(3 * H, 2), wet: false };
+  expect(roadRuns([c(2 * H, 2), dry])).toEqual([{ from: 2, to: 3, salted: false }]);
+});
+
+test("wash: half-hour zone strip starts at 00:00, not the previous day's 23:30", () => {
+  const tz = "Asia/Kolkata"; // local midnight = 18:30Z
+  const now = Date.UTC(2026, 8, 16, 6, 30);
+  const start = Date.UTC(2026, 8, 15, 0, 0);
+  const hrs: HourPoint[] = [...Array(24 * 5).keys()].map((i) => ({
+    t: start + i * H,
+    mm: 0,
+    wind: 0,
+    past: start + (i + 1) * H <= now,
+  }));
+  const r = planWash(hrs, now, { ...WASH, tz, days: 2 });
+  const hs = r.days[1]!.road.map((c) => c.h);
+  expect(hs[0]).toBe(0);
+  expect(new Set(hs).size).toBe(hs.length);
+  expect(r.days.every((d) => d.road.length <= 24)).toBe(true);
 });
 
 test("wash: roads dry at half speed overnight — 02:00 rain is still wet at 06:00, 01:00 rain is not", () => {

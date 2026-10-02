@@ -32,7 +32,7 @@ import {
   type CommuteWindow,
   type HourCell,
 } from "./commute";
-import { hm, hLabel, localParts } from "./time";
+import { hm, hLabel, localParts, hh } from "./time";
 import {
   CAP,
   washHero,
@@ -515,7 +515,13 @@ export class OutdoorWorkCard extends LitElement {
   private _commuteRow(d: CommuteDay, t: Strings): TemplateResult {
     return html`
       <div
-        class=${classMap({ cgrid: true, crow: true, today: d.isToday, far: d.far, done: d.done })}
+        class=${classMap({
+          cgrid: true,
+          crow: true,
+          today: d.isToday && !d.done,
+          far: d.far,
+          done: d.done,
+        })}
       >
         <div class="cell l">
           <span class="dn">${d.short}</span><span class="dd">${d.dom}</span>
@@ -859,7 +865,7 @@ export class OutdoorWorkCard extends LitElement {
                                 ></i>`,
                             )}
                         </div>
-                        <span>${String(b).padStart(2, "0")}</span>
+                        <span>${hh(b)}</span>
                       </div>`,
                     )}
                   </div>

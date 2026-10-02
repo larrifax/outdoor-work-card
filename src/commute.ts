@@ -13,7 +13,7 @@
  * informational only and never changes a level or the grade.
  */
 import type { HourPoint } from "./types";
-import { localParts, zonedToUtc, zonedMin, isoWd } from "./time";
+import { localParts, zonedToUtc, zonedMin, isoWd, hh } from "./time";
 import { buildDays, type DayBase, type Names } from "./logic";
 
 const H = 3_600_000;
@@ -355,7 +355,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const wl = windLevel(eff, o);
     return {
       t,
-      label: String(lp.h).padStart(2, "0"),
+      label: hh(lp.h),
       mm: s.mm,
       snow: s.snow,
       snowDom: s.water > 0.5 * s.mm,
@@ -433,12 +433,14 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   // stays as a `done` row (to judge the grade against the ride) and doesn't count toward `days`.
   const days: CommuteDay[] = [];
   let prevIso: number | null = null;
+  let kept = 0;
   for (const [i, base] of buildDays(now, o.tz, 21, o.names).entries()) {
-    if (days.length - (days[0]?.done ? 1 : 0) >= o.days) break;
+    if (kept >= o.days) break;
     const p = localParts(base.dayStart + 12 * H, o.tz);
     const iso = isoWd(p.wd);
     if (!o.workdays.includes(iso)) continue;
     const done = i === 0 && now >= zonedMin(p, o.home[1], o.tz);
+    if (!done) kept++;
 
     const toWork = windowFor(p.y, p.m, p.d, o.toWork);
     const home = windowFor(p.y, p.m, p.d, o.home);
