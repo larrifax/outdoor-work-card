@@ -179,7 +179,7 @@ export interface Strings {
   washInfo: (kind: WashKind, time: string, salted?: boolean) => string;
   outDays: (streak: number, open: boolean) => string;
   /** Legend under the day hint's 24-hour road strip. */
-  roadKey: string;
+  roadKey: { wet: string; salt: string; off: string };
   /** Wet stretches under the strip, e.g. "Wet 06–11 · salted 14–16". */
   roadRuns: (runs: RoadRun[]) => string;
 
@@ -426,7 +426,7 @@ const EN: Strings = {
           ? `Salted roads wet while you drive from ${time}.`
           : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  roadKey: "red wet · amber salted · faded not driving",
+  roadKey: { wet: "wet", salt: "salted", off: "not driving" },
   roadRuns: (runs) => runText(runs, "wet", "salted"),
 
   commute: EN_PHRASES,
@@ -710,7 +710,7 @@ const NB: Strings = {
           ? `Saltede veier våte mens du kjører fra ${time}.`
           : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  roadKey: "rød våt · gul saltet · blek kjører ikke",
+  roadKey: { wet: "våt", salt: "saltet", off: "kjører ikke" },
   roadRuns: (runs) => runText(runs, "våt", "saltet"),
 
   commute: {

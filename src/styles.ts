@@ -678,10 +678,36 @@ export const styles = css`
     margin-top: 4px;
     font-weight: 500;
   }
+  /* Key swatches are round, not the strip's tall bars, and sit behind a rule so they don't read as hours. */
   .tip .roadkey {
-    margin-top: 3px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 5px;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
     font-size: 10px;
-    opacity: 0.75;
+  }
+  .tip .roadkey span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    opacity: 0.8;
+  }
+  .tip .roadkey i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: color-mix(in srgb, currentColor 25%, transparent);
+  }
+  .tip .roadkey i.wet {
+    background: var(--owc-red);
+  }
+  .tip .roadkey i.salt {
+    background: var(--owc-amber);
+  }
+  .tip .roadkey i.off {
+    opacity: 0.35;
   }
   .tip::after {
     content: "";

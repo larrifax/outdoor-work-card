@@ -885,7 +885,11 @@ export class OutdoorWorkCard extends LitElement {
                     )}
                   </div>
                   ${d.roadRuns.length ? html`<div class="runs">${t.roadRuns(d.roadRuns)}</div>` : nothing}
-                  <div class="roadkey">${t.roadKey}</div>`
+                  <div class="roadkey">
+                    ${(["wet", "salt", "off"] as const).map(
+                      (k) => html`<span><i class=${k}></i>${t.roadKey[k]}</span>`,
+                    )}
+                  </div>`
               : nothing
           }</span
         >
