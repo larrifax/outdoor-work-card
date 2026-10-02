@@ -51,6 +51,8 @@ export type CommuteConfig = Pick<
 > & {
   /** Winter-tyres entity id, "" when unset. */
   winterTyresEntity: string;
+  /** A work coordinate was given but no bearing came out (one missing, out of range, or on top of home). */
+  routeInvalid: boolean;
 };
 
 /** Unknown or missing mode falls back to work. */
@@ -130,6 +132,7 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
         }))
       : defaultTasks(t);
 
+  const route = commuteBearing(lat, lon, c.work_latitude, c.work_longitude);
   return {
     lang,
     names,
@@ -185,7 +188,8 @@ export function resolve(c: CardConfig, hass: HassLike | undefined): Resolved {
       windFine,
       windOk: Math.max(windFine, num(c.wind_ok, def.windOk, 0, 40)),
       workdays,
-      bearing: commuteBearing(lat, lon, c.work_latitude, c.work_longitude),
+      bearing: route,
+      routeInvalid: route === undefined && (c.work_latitude != null || c.work_longitude != null),
       winterTyresEntity:
         typeof c.winter_tyres_entity === "string" ? c.winter_tyres_entity.trim() : "",
     },

@@ -194,10 +194,24 @@ export interface Strings {
   /** Grade F overrides the light-indexed caption/verdict. */
   cCaptionF: string;
   cVerdictF: string;
-  /** Tile hint: hour, rain, effective/mean/gust wind (pre-formatted). */
-  cTileHint: (hh: string, mm: string, eff: string, mean: string, gust: string) => string;
+  /** Tile hint: hour, rain, shown/mean/gust wind (pre-formatted), wind direction word when weighted by the ride. */
+  cTileHint: (
+    hh: string,
+    mm: string,
+    eff: string,
+    mean: string,
+    gust: string,
+    dir?: string,
+  ) => string;
   /** Tile hint for a snow-dominated hour: snowfall in cm. */
-  cTileHintSnow: (hh: string, cm: string, eff: string, mean: string, gust: string) => string;
+  cTileHintSnow: (
+    hh: string,
+    cm: string,
+    eff: string,
+    mean: string,
+    gust: string,
+    dir?: string,
+  ) => string;
   /** Second hint line: temperature, plus the icy suffix. */
   cHintTemp: (temp: string, icy: boolean) => string;
   cNoDays: string;
@@ -236,6 +250,8 @@ export interface Strings {
   popRoute: (deg: number, pct: number) => string;
   /** Rules note without work coordinates. */
   popNoRoute: string;
+  /** Rules note when work coordinates are set but unusable. */
+  popBadRoute: string;
   /** Tile hint suffix per wind direction relative to the ride. */
   cWindDir: Record<"head" | "cross" | "tail", string>;
   popSnowUnit: string;
@@ -420,10 +436,10 @@ const EN: Strings = {
   cVerdict: ["Bike", "Bike if you can bear it", "Take the home office"],
   cCaptionF: "Dangerous to ride",
   cVerdictF: "Don't bike",
-  cTileHint: (hh, mm, eff, mean, gust) =>
-    `${hh}:00 · ${mm} mm · wind ${eff} m/s (mean ${mean}, gusts ${gust})`,
-  cTileHintSnow: (hh, cm, eff, mean, gust) =>
-    `${hh}:00 · ${cm} cm snow · wind ${eff} m/s (mean ${mean}, gusts ${gust})`,
+  cTileHint: (hh, mm, eff, mean, gust, dir) =>
+    `${hh}:00 · ${mm} mm · ${dir ? `${dir}, feels ${eff}` : `wind ${eff}`} m/s (mean ${mean}, gusts ${gust})`,
+  cTileHintSnow: (hh, cm, eff, mean, gust, dir) =>
+    `${hh}:00 · ${cm} cm snow · ${dir ? `${dir}, feels ${eff}` : `wind ${eff}`} m/s (mean ${mean}, gusts ${gust})`,
   cHintTemp: (temp, icy) => `${temp} °C${icy ? ", wet earlier" : ""}`,
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
@@ -436,7 +452,7 @@ const EN: Strings = {
   cColHome: (a, b) => `Home ${a}–${b}`,
   popCommuteTile: "In each hour tile",
   popRainUnit: "rain, mm/h",
-  popWindUnit: "effective wind, m/s",
+  popWindUnit: "effective wind, m/s (as felt, with work coordinates)",
   popTileNote: "Each icon is coloured by its own scale; the tile takes the worse of the two.",
   popScales: "Scales",
   popFine: "fine",
@@ -457,8 +473,10 @@ const EN: Strings = {
   popEffWind: (pct) =>
     `Effective wind is the mean, or ${pct}% of the gust speed when gusts are unusually strong.`,
   popRoute: (deg, pct) =>
-    `Riding ${deg}° to work (straight line, reversed home): headwind counts up to ${pct}% more, tailwind ${pct}% less. Danger ignores direction.`,
+    `Riding ${deg}° to work (straight line, reversed home): headwind counts up to ${pct}% more, tailwind ${pct}% less. Danger takes the worse of felt and undirected wind. Calm hours (under 1 m/s) ignore direction.`,
   popNoRoute: "Set work_latitude / work_longitude to weigh headwind and tailwind.",
+  popBadRoute:
+    "work_latitude / work_longitude ignored: set both, within ±90 / ±180, and away from home. Wind direction is not weighed.",
   cWindDir: { head: "headwind", cross: "crosswind", tail: "tailwind" },
   popSnowUnit: "snowfall, cm/h (when snow dominates)",
   popSnowLabel: "snow",
@@ -721,10 +739,10 @@ const NB: Strings = {
   cVerdict: ["Sykle", "Sykle om du tåler det", "Ta hjemmekontor"],
   cCaptionF: "Farlig å sykle",
   cVerdictF: "Ikke sykle",
-  cTileHint: (hh, mm, eff, mean, gust) =>
-    `${hh}:00 · ${mm} mm · vind ${eff} m/s (middel ${mean}, kast ${gust})`,
-  cTileHintSnow: (hh, cm, eff, mean, gust) =>
-    `${hh}:00 · ${cm} cm snø · vind ${eff} m/s (middel ${mean}, kast ${gust})`,
+  cTileHint: (hh, mm, eff, mean, gust, dir) =>
+    `${hh}:00 · ${mm} mm · ${dir ? `${dir}, føles ${eff}` : `vind ${eff}`} m/s (middel ${mean}, kast ${gust})`,
+  cTileHintSnow: (hh, cm, eff, mean, gust, dir) =>
+    `${hh}:00 · ${cm} cm snø · ${dir ? `${dir}, føles ${eff}` : `vind ${eff}`} m/s (middel ${mean}, kast ${gust})`,
   cHintTemp: (temp, icy) => `${temp} °C${icy ? ", vått tidligere" : ""}`,
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
@@ -737,7 +755,7 @@ const NB: Strings = {
   cColHome: (a, b) => `Hjem ${a}–${b}`,
   popCommuteTile: "I hver timerute",
   popRainUnit: "regn, mm/t",
-  popWindUnit: "effektiv vind, m/s",
+  popWindUnit: "effektiv vind, m/s (slik den føles, med jobbkoordinater)",
   popTileNote: "Hvert ikon fargelegges på sin egen skala; ruta tar den verste av de to.",
   popScales: "Skalaer",
   popFine: "fint",
@@ -758,8 +776,10 @@ const NB: Strings = {
   popEffWind: (pct) =>
     `Effektiv vind er middelvinden, eller ${pct} % av kastene når de er uvanlig kraftige.`,
   popRoute: (deg, pct) =>
-    `Du sykler ${deg}° til jobb (rett linje, motsatt hjem): motvind teller opptil ${pct} % mer, medvind ${pct} % mindre. Fare ser bort fra retning.`,
+    `Du sykler ${deg}° til jobb (rett linje, motsatt hjem): motvind teller opptil ${pct} % mer, medvind ${pct} % mindre. Fare bruker den verste av følt og uretningsbestemt vind. Stille timer (under 1 m/s) ser bort fra retning.`,
   popNoRoute: "Sett work_latitude / work_longitude for å vekte motvind og medvind.",
+  popBadRoute:
+    "work_latitude / work_longitude ignoreres: sett begge, innenfor ±90 / ±180, og et stykke fra hjemme. Vindretning vektes ikke.",
   cWindDir: { head: "motvind", cross: "sidevind", tail: "medvind" },
   popSnowUnit: "snøfall, cm/t (når snø dominerer)",
   popSnowLabel: "snø",

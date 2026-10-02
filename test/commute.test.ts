@@ -171,13 +171,15 @@ test("effective wind is the mean in ordinary gusts, rises with unusually strong 
   expect(tue.home.cells[0].eff).toBeCloseTo(5);
 });
 
-test("commute bearing: headwind counts more, tailwind less, ride home reverses, danger ignores direction", () => {
+test("commute bearing: headwind counts more, tailwind less, ride home reverses, danger on worse of felt and raw", () => {
   expect(bearing(59.9, 10.7, 60.0, 10.7)).toBeCloseTo(0);
   expect(bearing(59.9, 10.7, 59.9, 10.9)).toBeCloseTo(90, 0);
   // Rider goes north to work, south home; wind from the north all day.
   const hours = series({
     "2026-09-22T07": [0, 8],
     "2026-09-22T16": [0, 8],
+    "2026-09-22T08": [0, 0.5],
+    "2026-09-23T07": [0, 11],
     "2026-09-23T16": [0, 15],
   });
   for (const h of hours) h.windDir = 0;
@@ -189,6 +191,10 @@ test("commute bearing: headwind counts more, tailwind less, ride home reverses, 
   expect(hm.feel).toBeCloseTo(8 * 0.6);
   // 15 m/s tailwind feels like 9 but is still dangerous
   expect(wed.home.cells[0].windLevel).toBe(3);
+  // 11 m/s headwind feels like 15.4: dangerous although raw wind is below DANGER_WIND
+  expect(wed.toWork.cells[0].windLevel).toBe(3);
+  // calm hour: direction is noise, no weighting or label
+  expect([tue.toWork.cells[1].dir, tue.toWork.cells[1].feel]).toEqual([null, 0.5]);
   // no bearing → direction ignored
   const plain = planCommute(hours, at("2026-09-21T06:40"), OPTS).days[1].toWork.cells[0];
   expect([plain.dir, plain.feel, plain.windLevel]).toEqual([null, 8, 1]);

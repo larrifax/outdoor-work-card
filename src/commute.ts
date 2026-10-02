@@ -15,6 +15,7 @@
 import type { HourPoint } from "./types";
 import { localParts, zonedToUtc, zonedMin, isoWd, hh } from "./time";
 import { buildDays, type DayBase, type Names } from "./logic";
+import { RAD } from "./sun";
 
 const H = 3_600_000;
 
@@ -31,10 +32,12 @@ export const GUST_FACTOR = 0.6;
 /** Dangerous regardless of rider thresholds: effective wind above this (m/s, ≈ gusts > 23 m/s)… */
 export const DANGER_WIND = 14;
 // ponytail: straight-line heading home → work, linear head/tail weighting. Ceiling: winding routes; upgrade to a waypoint list weighted by segment length if riders ask.
-/** With a commute bearing, wind for the fine/ok bands = eff × (1 + HEAD_FACTOR × cos θ), θ = angle between where the wind comes from and where you ride: full headwind ×1.4, crosswind ×1, tailwind ×0.6. Danger stays on the undirected wind (gusts knock you over from any side). */
+/** With a commute bearing, wind for the fine/ok bands = eff × (1 + HEAD_FACTOR × cos θ), θ = angle between where the wind comes from and where you ride: full headwind ×1.4, crosswind ×1, tailwind ×0.6. Danger takes the worse of felt and undirected wind: headwind can push an hour into danger, tailwind never pulls it out (gusts knock you over from any side). */
 export const HEAD_FACTOR = 0.4;
 /** |cos θ| below this reads as crosswind in hints. */
 const CROSS_COS = 0.5;
+/** Effective wind below this (m/s) is calm: Open-Meteo direction is noise, so no head/tail weighting or label. */
+const CALM_WIND = 1;
 /** …or rain above this (mm/h, cloudburst). */
 export const DANGER_RAIN = 8;
 /** Midday flag: one hour above rainOk, or a midday total above this many × rainOk. */
@@ -279,24 +282,22 @@ export function gradeDay(toWork: Level, home: Level): Grade {
 /** Rain part, mm/h → level on the rider's thresholds (above DANGER_RAIN is always dangerous). */
 export const rainLevel = (mm: number, t: Thresholds): Level =>
   mm > DANGER_RAIN ? 3 : mm <= t.rainFine ? 0 : mm <= t.rainOk ? 1 : 2;
-/** Felt wind, m/s → level; `raw` (undirected effective wind) decides danger. */
+/** Felt wind, m/s → level; danger on the worse of felt and `raw` (undirected effective wind). */
 export const windLevel = (w: number, t: Thresholds, raw = w): Level =>
-  raw > DANGER_WIND ? 3 : w <= t.windFine ? 0 : w <= t.windOk ? 1 : 2;
+  Math.max(w, raw) > DANGER_WIND ? 3 : w <= t.windFine ? 0 : w <= t.windOk ? 1 : 2;
 
 /** Initial great-circle bearing from a to b, degrees 0–360 (0 = N). */
 export function bearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const r = Math.PI / 180;
-  const dl = (lon2 - lon1) * r;
-  const y = Math.sin(dl) * Math.cos(lat2 * r);
+  const dl = (lon2 - lon1) * RAD;
+  const y = Math.sin(dl) * Math.cos(lat2 * RAD);
   const x =
-    Math.cos(lat1 * r) * Math.sin(lat2 * r) -
-    Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos(dl);
-  return (Math.atan2(y, x) / r + 360) % 360;
+    Math.cos(lat1 * RAD) * Math.sin(lat2 * RAD) -
+    Math.sin(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.cos(dl);
+  return (Math.atan2(y, x) / RAD + 360) % 360;
 }
 
 /** Wind from `from`° on a rider heading `heading`°: cos θ (1 = headwind, −1 = tailwind). */
-export const headCos = (from: number, heading: number): number =>
-  Math.cos(((from - heading) * Math.PI) / 180);
+export const headCos = (from: number, heading: number): number => Math.cos((from - heading) * RAD);
 /** Snowfall, cm/h → level on the fixed snow scale. */
 export const snowLevel = (cm: number): Level =>
   cm <= 0 ? 0 : cm > DANGER_SNOW ? 3 : cm <= SNOW_OK ? 1 : 2;
@@ -377,7 +378,8 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const wind = p?.wind ?? 0;
     const gust = p?.gust ?? wind;
     const eff = Math.max(wind, gust * GUST_FACTOR);
-    const cos = heading == null || p?.windDir == null ? null : headCos(p.windDir, heading);
+    const cos =
+      heading == null || p?.windDir == null || eff < CALM_WIND ? null : headCos(p.windDir, heading);
     const feel = cos === null ? eff : eff * (1 + HEAD_FACTOR * cos);
     const dir: WindDir | null =
       cos === null ? null : cos >= CROSS_COS ? "head" : cos <= -CROSS_COS ? "tail" : "cross";
@@ -470,6 +472,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
 
   // Walk forward from today, keeping workdays until we have `days`. Once today's home window is over, today
   // stays as a `done` row (to judge the grade against the ride) and doesn't count toward `days`.
+  const homeHeading = o.bearing == null ? undefined : (o.bearing + 180) % 360;
   const days: CommuteDay[] = [];
   let prevIso: number | null = null;
   let kept = 0;
@@ -482,13 +485,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     if (!done) kept++;
 
     const toWork = windowFor(p.y, p.m, p.d, o.toWork, o.bearing);
-    const home = windowFor(
-      p.y,
-      p.m,
-      p.d,
-      o.home,
-      o.bearing == null ? undefined : (o.bearing + 180) % 360,
-    );
+    const home = windowFor(p.y, p.m, p.d, o.home, homeHeading);
 
     const grade = gradeDay(toWork.level, home.level);
     const midday = middayFor(p.y, p.m, p.d, o.midday, grade);

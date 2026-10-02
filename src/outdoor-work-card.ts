@@ -51,6 +51,10 @@ import "./editor";
 
 const VERSION = "2.0.0";
 
+/** Wind number for a tile: felt wind, unless undirected wind alone makes the hour dangerous (tailwind). Matches `windLevel`. */
+const shownWind = (c: HourCell): number =>
+  c.eff > DANGER_WIND && c.feel <= DANGER_WIND ? c.eff : c.feel;
+
 declare global {
   interface Window {
     customCards?: Array<{
@@ -380,9 +384,11 @@ export class OutdoorWorkCard extends LitElement {
       <div class="note">
         ${t.popTileNote} ${t.popEffWind(Math.round(GUST_FACTOR * 100))}
         ${
-          r.commute.bearing == null
-            ? t.popNoRoute
-            : t.popRoute(Math.round(r.commute.bearing), Math.round(HEAD_FACTOR * 100))
+          r.commute.routeInvalid
+            ? t.popBadRoute
+            : r.commute.bearing == null
+              ? t.popNoRoute
+              : t.popRoute(Math.round(r.commute.bearing) % 360, Math.round(HEAD_FACTOR * 100))
         }
       </div>
       <div class="h">${t.popScales}</div>
@@ -604,7 +610,7 @@ export class OutdoorWorkCard extends LitElement {
                       }
                       <span class="val"
                         ><span class="ic${c.windLevel}">${icons.wind(11)}</span
-                        >${Math.round(c.feel)}</span
+                        >${Math.round(shownWind(c))}</span
                       >
                       <span
                         class="tip"
@@ -613,10 +619,11 @@ export class OutdoorWorkCard extends LitElement {
                         >${(c.snowDom ? t.cTileHintSnow : t.cTileHint)(
                           c.label,
                           (c.snowDom ? c.snow : c.mm).toFixed(1),
-                          String(Math.round(c.feel)),
+                          String(Math.round(shownWind(c))),
                           String(Math.round(c.wind)),
                           String(Math.round(c.gust)),
-                        )}${c.dir ? ` · ${t.cWindDir[c.dir]}` : ""}${
+                          c.dir ? t.cWindDir[c.dir] : undefined,
+                        )}${
                           c.temp === null
                             ? nothing
                             : html`<br />${t.cHintTemp(String(Math.round(c.temp)), c.icy)}`

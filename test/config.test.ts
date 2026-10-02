@@ -31,3 +31,21 @@ test("carwash parked window needs both valid ends", () => {
   expect(wash({ parked_start: "08:00" }).wash.parked).toBeNull();
   expect(wash({ parked_start: "8am", parked_end: "16:00" }).wash.parked).toBeNull();
 });
+
+test("commute bearing needs both valid work coordinates away from home; otherwise flags routeInvalid", () => {
+  const route = (extra: object) =>
+    resolve({ type: "custom:outdoor-work-card", mode: "commute", ...extra }, hass).commute;
+  expect(route({})).toMatchObject({ bearing: undefined, routeInvalid: false });
+  expect(route({ work_latitude: 60.0, work_longitude: 10.75 }).bearing).toBeCloseTo(0);
+  expect(route({ work_latitude: "59.91", work_longitude: "11" }).bearing).toBeCloseTo(90, 0);
+  for (const bad of [
+    { work_latitude: 60 },
+    { work_latitude: 60, work_longitude: 190 },
+    { work_latitude: "", work_longitude: 10.8 },
+    { work_latitude: 59.91, work_longitude: 10.75 },
+  ])
+    expect(route(bad), JSON.stringify(bad)).toMatchObject({
+      bearing: undefined,
+      routeInvalid: true,
+    });
+});
