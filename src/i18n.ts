@@ -7,7 +7,9 @@
  * All strings here are plain (no lit dependency) — the card assembles the HTML.
  */
 import type { HassLike } from "./types";
+import type { RoadRun } from "./logic";
 import { EN_PHRASES, type CommutePhrases } from "./commute";
+import { hh } from "./time";
 
 export type Lang = "en" | "nb";
 
@@ -31,6 +33,9 @@ export interface DayNames {
 export type Seg = string | { b: string; gain?: boolean };
 
 const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** "Wet 06–11 · salted 14–16": end-exclusive local hours. */
+const runText = (runs: RoadRun[], wet: string, salted: string) =>
+  cap1(runs.map((r) => `${r.salted ? salted : wet} ${hh(r.from)}–${hh(r.to)}`).join(" · "));
 const dayCache = new Map<Lang, DayNames>();
 
 export function dayNames(lang: Lang): DayNames {
@@ -173,6 +178,10 @@ export interface Strings {
   /** Day hint; `time` = first wet driving hour (wetWhileDriving only), `salted` = roads were salted then. */
   washInfo: (kind: WashKind, time: string, salted?: boolean) => string;
   outDays: (streak: number, open: boolean) => string;
+  /** Legend under the day hint's 24-hour road strip. */
+  roadKey: string;
+  /** Wet stretches under the strip, e.g. "Wet 06–11 · salted 14–16". */
+  roadRuns: (runs: RoadRun[]) => string;
 
   // --- commute mode ---
   /** Fragments the commute reason line is built from. */
@@ -194,6 +203,8 @@ export interface Strings {
   cNoDays: string;
   cNextWeek: string;
   cOutlook: string;
+  /** note on today's row once the home window is over */
+  cDone: string;
   // column headers — cColToWork/cColHome take "HH"–"HH" strings
   cColDay: string;
   cColGrade: string;
@@ -393,6 +404,8 @@ const EN: Strings = {
           ? `Salted roads wet while you drive from ${time}.`
           : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
+  roadKey: "red wet · amber salted · faded not driving",
+  roadRuns: (runs) => runText(runs, "wet", "salted"),
 
   commute: EN_PHRASES,
   cToday: "Today",
@@ -409,6 +422,7 @@ const EN: Strings = {
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
   cOutlook: "outlook",
+  cDone: "done",
   cColDay: "Day",
   cColGrade: "Grade",
   cColToWork: (a, b) => `To work ${a}–${b}`,
@@ -664,6 +678,8 @@ const NB: Strings = {
           ? `Saltede veier våte mens du kjører fra ${time}.`
           : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
+  roadKey: "rød våt · gul saltet · blek kjører ikke",
+  roadRuns: (runs) => runText(runs, "våt", "saltet"),
 
   commute: {
     rain: "regn",
@@ -699,6 +715,7 @@ const NB: Strings = {
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
   cOutlook: "utsikter",
+  cDone: "ferdig",
   cColDay: "Dag",
   cColGrade: "Karakter",
   cColToWork: (a, b) => `Til jobb ${a}–${b}`,

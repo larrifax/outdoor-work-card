@@ -638,6 +638,51 @@ export const styles = css`
     font-size: 15px;
     font-weight: 600;
   }
+  /* 24 h in four 6-hour blocks; each block labels its first hour. Grouped by local hour, so DST days stay right. */
+  .tip .road {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 6px;
+  }
+  .tip .road .blk {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1;
+    text-align: left;
+  }
+  .tip .road .cells {
+    display: flex;
+    gap: 1px;
+  }
+  /* 24 × 6 + 20 + 3 × 5 = 179px (185 on 25-hour days), inside the tip's 196px content box */
+  .tip .road i {
+    width: 6px;
+    height: 10px;
+    border-radius: 2px;
+    background: color-mix(in srgb, currentColor 25%, transparent);
+  }
+  .tip .road i.wet {
+    background: var(--owc-red);
+  }
+  .tip .road i.salt {
+    background: var(--owc-amber);
+  }
+  .tip .road i.off {
+    opacity: 0.35;
+  }
+  .tip .runs {
+    margin-top: 4px;
+    font-weight: 500;
+  }
+  .tip .roadkey {
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.75;
+  }
   .tip::after {
     content: "";
     position: absolute;
@@ -846,6 +891,9 @@ export const styles = css`
   }
   .crow.far {
     opacity: 0.72;
+  }
+  .crow.done {
+    opacity: 0.55;
   }
   .crow .dn {
     font-size: 13px;

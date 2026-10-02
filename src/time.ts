@@ -4,6 +4,9 @@
  * abroad should agree on what "18:00" means.
  */
 
+/** 7 → "07" */
+export const hh = (n: number): string => String(n).padStart(2, "0");
+
 export interface LocalParts {
   y: number;
   m: number; // 1-12
@@ -53,7 +56,7 @@ export function localParts(ms: number, tz: string): LocalParts {
     h,
     mi,
     wd,
-    key: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+    key: `${y}-${hh(m)}-${hh(d)}`,
   };
 }
 
@@ -92,7 +95,7 @@ export function parseHM(s: string | undefined, fallback: string): number {
 
 export function hm(ms: number, tz: string): string {
   const p = localParts(ms, tz);
-  return `${String(p.h).padStart(2, "0")}:${String(p.mi).padStart(2, "0")}`;
+  return `${hh(p.h)}:${hh(p.mi)}`;
 }
 
 export function hoursBetween(a: number, b: number): number {
@@ -104,7 +107,7 @@ export function durLabel(hours: number, unit = "h"): string {
   if (hours <= 0) return "—";
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
-  return m === 60 ? `${h + 1}${unit}00` : `${h}${unit}${String(m).padStart(2, "0")}`;
+  return m === 60 ? `${h + 1}${unit}00` : `${h}${unit}${hh(m)}`;
 }
 
 /** "31 h" / "48 h+" */

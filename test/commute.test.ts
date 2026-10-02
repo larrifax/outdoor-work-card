@@ -86,14 +86,20 @@ test("Wednesday 13:30: rolling window skips the weekend and marks the new week",
   expect(r.days[0].home.cells.map((c) => c.label)).toEqual(["16", "17"]);
 });
 
-test("after the home window today drops off; Friday evening shows next week", () => {
-  const r = planCommute(series(), at("2026-09-25T18:05"), OPTS);
-  expect(r.days.map((d) => d.short)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
-  expect(r.days[0].isToday).toBe(false);
-  expect(r.days[0].full).toBe("Monday");
-  expect(r.days[0].newWeek).toBe(false);
+test("after the home window today stays as a done row; Friday evening shows next week", () => {
+  const r = planCommute(series({ "2026-09-25T17": [2.0] }), at("2026-09-25T18:05"), OPTS);
+  expect(r.days.map((d) => d.short)).toEqual(["Fri", "Mon", "Tue", "Wed", "Thu", "Fri"]);
+  expect(r.days[0].done).toBe(true);
+  expect(r.days[0].grade).not.toBe("A"); // today's rain still graded, to judge against the ride
+  expect(r.days[0].home.cells.every((c) => c.passed)).toBe(true);
+  expect(r.days[1].done).toBe(false);
+  expect(r.days[1].full).toBe("Monday");
+  expect(r.days[1].newWeek).toBe(true);
   const sat = planCommute(series(), at("2026-09-26T10:00"), OPTS);
   expect(sat.days.map((d) => d.short)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  expect(sat.days[0].newWeek).toBe(false);
+  const mid = planCommute(series(), at("2026-09-25T17:30"), OPTS);
+  expect(mid.days[0].done).toBe(false);
 });
 
 test("each property is graded on its own scale; tile takes the worse", () => {

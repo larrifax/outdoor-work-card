@@ -13,7 +13,7 @@
  * informational only and never changes a level or the grade.
  */
 import type { HourPoint } from "./types";
-import { localParts, zonedToUtc, zonedMin, isoWd } from "./time";
+import { localParts, zonedToUtc, zonedMin, isoWd, hh } from "./time";
 import { buildDays, type DayBase, type Names } from "./logic";
 
 const H = 3_600_000;
@@ -186,6 +186,8 @@ export interface CommuteDay extends DayBase {
   grade: Grade;
   /** some commute hour has no forecast: `grade` covers only the known hours, show it as unknown */
   unknown: boolean;
+  /** today, home window over: kept only to judge the grade against the ride */
+  done: boolean;
   /** traffic light for the grade: 0 green, 1 amber, 2 red */
   light: Light;
   /** short human reason, e.g. "light rain to work · breezy home" */
@@ -353,7 +355,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const wl = windLevel(eff, o);
     return {
       t,
-      label: String(lp.h).padStart(2, "0"),
+      label: hh(lp.h),
       mm: s.mm,
       snow: s.snow,
       snowDom: s.water > 0.5 * s.mm,
@@ -427,15 +429,18 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     };
   };
 
-  // Walk forward from today, keeping workdays until we have `days`. Today is skipped once its home window is over.
+  // Walk forward from today, keeping workdays until we have `days`. Once today's home window is over, today
+  // stays as a `done` row (to judge the grade against the ride) and doesn't count toward `days`.
   const days: CommuteDay[] = [];
   let prevIso: number | null = null;
+  let kept = 0;
   for (const [i, base] of buildDays(now, o.tz, 21, o.names).entries()) {
-    if (days.length >= o.days) break;
+    if (kept >= o.days) break;
     const p = localParts(base.dayStart + 12 * H, o.tz);
     const iso = isoWd(p.wd);
     if (!o.workdays.includes(iso)) continue;
-    if (i === 0 && now >= zonedMin(p, o.home[1], o.tz)) continue;
+    const done = i === 0 && now >= zonedMin(p, o.home[1], o.tz);
+    if (!done) kept++;
 
     const toWork = windowFor(p.y, p.m, p.d, o.toWork);
     const home = windowFor(p.y, p.m, p.d, o.home);
@@ -472,6 +477,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
       home,
       grade,
       unknown,
+      done,
       light: gradeToLight(grade),
       reason,
     });

@@ -1,5 +1,5 @@
 import type { CardConfig, HassLike, Mode, TaskConfig } from "./types";
-import { parseHM } from "./time";
+import { parseHM, hh } from "./time";
 import { PRESETS, type CommuteOptions } from "./commute";
 import type { WorkOptions, WashOptions } from "./logic";
 import { pickLang, strings, dayNames, type Lang, type DayNames } from "./i18n";
@@ -49,8 +49,7 @@ export type CommuteConfig = Pick<
 export const parseMode = (m: unknown): Mode => (m === "carwash" || m === "commute" ? m : "work");
 
 /** minutes-after-midnight → "HH:MM" */
-export const fmt = (m: number): string =>
-  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+export const fmt = (m: number): string => `${hh(Math.floor(m / 60))}:${hh(m % 60)}`;
 
 const num = (v: unknown, d: number, min = -Infinity, max = Infinity) => {
   const n = typeof v === "string" ? parseFloat(v) : (v as number);

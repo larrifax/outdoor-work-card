@@ -323,6 +323,42 @@ export interface WashDay extends DayBase {
   /** When the roads dry after the day's last wet hour (UTC ms), null if never wet or never dry in data. */
   dryAt: number | null;
   icon: WashIcon;
+  /** Road state per local hour of the day, for judging the verdict against the day. */
+  road: RoadCell[];
+  /** Wet stretches of `road` (any hour, driving or not), split where salted state changes. */
+  roadRuns: RoadRun[];
+}
+
+/** One hour of a wash day's road strip. */
+export interface RoadCell {
+  /** hour start, UTC ms (runs break where hours aren't consecutive) */
+  t: number;
+  /** local hour 0–23 (labels and block gaps follow it, so DST days stay right) */
+  h: number;
+  wet: boolean;
+  /** wet only because the roads were salted */
+  salted: boolean;
+  driving: boolean;
+}
+
+/** A wet stretch within one day: local hours `from` to `to` (end-exclusive, 24 = cut at midnight). */
+export interface RoadRun {
+  from: number;
+  to: number;
+  salted: boolean;
+}
+
+/** Consecutive wet hours with the same salted state; a run ends one hour after its last cell. */
+export function roadRuns(cells: RoadCell[]): RoadRun[] {
+  const out: RoadRun[] = [];
+  cells.forEach((c, i) => {
+    if (!c.wet) return;
+    const last = out[out.length - 1];
+    const prev = cells[i - 1];
+    if (last && prev?.wet && prev.salted === c.salted && c.t === prev.t + H) last.to = c.h + 1;
+    else out.push({ from: c.h, to: c.h + 1, salted: c.salted });
+  });
+  return out;
 }
 
 export interface WashResult {
@@ -339,6 +375,8 @@ const inRange = (m: number, from: number, until: number) =>
 
 /** Road state for one hour of the series. */
 export interface RoadHour {
+  /** local hour 0–23 */
+  h: number;
   wet: boolean;
   /** someone drives: not night, not parked indoors */
   driving: boolean;
@@ -384,7 +422,7 @@ export function roadState(hours: HourPoint[], o: RoadOptions): RoadHour[] {
       salt = true;
       washOff = 0;
     }
-    return { wet, driving: !night && !parked, rainy, saltWet: wet && bySalt };
+    return { h: p.h, wet, driving: !night && !parked, rainy, saltWet: wet && bySalt };
   });
 }
 
@@ -435,8 +473,9 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     wetFrom: number | null;
     salted: boolean;
     dryAt: number | null;
+    road: RoadCell[];
   };
-  const info: Info[] = base.map((b) => {
+  const info: Info[] = base.map((b, di) => {
     const dayEnd = b.dayStart + 24 * H;
     const p = localParts(b.dayStart + 12 * H, o.tz);
     const washAt = zonedMin(p, o.washStart, o.tz);
@@ -448,9 +487,14 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
     let wetFrom: number | null = null;
     let saltedWet = false;
     let lastWet = -1;
+    const cells: RoadCell[] = [];
     hours.forEach((h, i) => {
       if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
       hasData = true;
+      const r = road[i]!;
+      // Strip: hours starting inside the day, displayed days only.
+      if (di < o.days && h.t >= b.dayStart)
+        cells.push({ t: h.t, h: r.h, wet: r.wet, salted: r.saltWet, driving: r.driving });
       peak = Math.max(peak, h.mm);
       if (road[i]!.wet) lastWet = i;
       if (!dirtyAt(i)) return;
@@ -467,7 +511,17 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       dryAt = j >= 0 ? hours[j]!.t : null;
     }
     if (!hasData) clean = eveningClean = false;
-    return { clean, eveningClean, peak, hasData, evening, wetFrom, salted: saltedWet, dryAt };
+    return {
+      clean,
+      eveningClean,
+      peak,
+      hasData,
+      evening,
+      wetFrom,
+      salted: saltedWet,
+      dryAt,
+      road: cells,
+    };
   });
 
   const nextDirtyFrom = (s: number): DirtyStretch | null => {
@@ -507,6 +561,8 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       salted: inf.salted,
       dryAt: inf.dryAt,
       icon,
+      road: inf.road,
+      roadRuns: roadRuns(inf.road),
     };
   });
 
