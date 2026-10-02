@@ -49,7 +49,7 @@ import { strings, type Strings, type WashKind } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
 
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 
 /** Wind number for a tile: felt wind, unless undirected wind alone makes the hour dangerous (tailwind). Matches `windLevel`. */
 const shownWind = (c: HourCell): number =>
