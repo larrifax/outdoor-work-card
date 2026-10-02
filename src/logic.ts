@@ -325,15 +325,40 @@ export interface WashDay extends DayBase {
   icon: WashIcon;
   /** Road state per local hour of the day, for judging the verdict against the day. */
   road: RoadCell[];
+  /** Wet stretches of `road` (any hour, driving or not), split where salted state changes. */
+  roadRuns: RoadRun[];
 }
 
 /** One hour of a wash day's road strip. */
 export interface RoadCell {
   t: number;
+  /** local hour 0–23 (labels and block gaps follow it, so DST days stay right) */
+  h: number;
   wet: boolean;
   /** wet only because the roads were salted */
   salted: boolean;
   driving: boolean;
+}
+
+/** A wet stretch within one day: local hours `from` to `to` (end-exclusive, 24 = cut at midnight). */
+export interface RoadRun {
+  from: number;
+  to: number;
+  salted: boolean;
+}
+
+/** Consecutive wet cells with the same salted state; ends at the next cell's hour or 24. */
+export function roadRuns(cells: RoadCell[]): RoadRun[] {
+  const out: RoadRun[] = [];
+  cells.forEach((c, i) => {
+    if (!c.wet) return;
+    const to = cells[i + 1]?.h ?? 24;
+    const last = out[out.length - 1];
+    const prev = cells[i - 1];
+    if (last && prev?.wet && prev.salted === c.salted) last.to = to;
+    else out.push({ from: c.h, to, salted: c.salted });
+  });
+  return out;
 }
 
 export interface WashResult {
@@ -465,7 +490,13 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       if (h.t + H <= b.dayStart || h.t >= dayEnd) return;
       hasData = true;
       const r = road[i]!;
-      cells.push({ t: h.t, wet: r.wet, salted: r.saltWet, driving: r.driving });
+      cells.push({
+        t: h.t,
+        h: localParts(h.t, o.tz).h,
+        wet: r.wet,
+        salted: r.saltWet,
+        driving: r.driving,
+      });
       peak = Math.max(peak, h.mm);
       if (road[i]!.wet) lastWet = i;
       if (!dirtyAt(i)) return;
@@ -533,6 +564,7 @@ export function planWash(hours: HourPoint[], now: number, o: WashOptions): WashR
       dryAt: inf.dryAt,
       icon,
       road: inf.road,
+      roadRuns: roadRuns(inf.road),
     };
   });
 

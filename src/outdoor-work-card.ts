@@ -847,13 +847,23 @@ export class OutdoorWorkCard extends LitElement {
           ${
             d.road.length
               ? html`<div class="road">
-                    ${d.road.map(
-                      (c) =>
-                        html`<i
-                          class=${classMap({ wet: c.wet, salt: c.salted, off: !c.driving })}
-                        ></i>`,
+                    ${[0, 6, 12, 18].map(
+                      (b) => html`<div class="blk">
+                        <div class="cells">
+                          ${d.road
+                            .filter((c) => c.h >= b && c.h < b + 6)
+                            .map(
+                              (c) =>
+                                html`<i
+                                  class=${classMap({ wet: c.wet, salt: c.salted, off: !c.driving })}
+                                ></i>`,
+                            )}
+                        </div>
+                        <span>${String(b).padStart(2, "0")}</span>
+                      </div>`,
                     )}
                   </div>
+                  ${d.roadRuns.length ? html`<div class="runs">${t.roadRuns(d.roadRuns)}</div>` : nothing}
                   <div class="roadkey">${t.roadKey}</div>`
               : nothing
           }</span

@@ -7,6 +7,7 @@
  * All strings here are plain (no lit dependency) — the card assembles the HTML.
  */
 import type { HassLike } from "./types";
+import type { RoadRun } from "./logic";
 import { EN_PHRASES, type CommutePhrases } from "./commute";
 
 export type Lang = "en" | "nb";
@@ -31,6 +32,10 @@ export interface DayNames {
 export type Seg = string | { b: string; gain?: boolean };
 
 const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const hh = (h: number) => String(h).padStart(2, "0");
+/** "Wet 06–11 · salted 14–16": end-exclusive local hours. */
+const runText = (runs: RoadRun[], wet: string, salted: string) =>
+  cap1(runs.map((r) => `${r.salted ? salted : wet} ${hh(r.from)}–${hh(r.to)}`).join(" · "));
 const dayCache = new Map<Lang, DayNames>();
 
 export function dayNames(lang: Lang): DayNames {
@@ -175,6 +180,8 @@ export interface Strings {
   outDays: (streak: number, open: boolean) => string;
   /** Legend under the day hint's 24-hour road strip. */
   roadKey: string;
+  /** Wet stretches under the strip, e.g. "Wet 06–11 · salted 14–16". */
+  roadRuns: (runs: RoadRun[]) => string;
 
   // --- commute mode ---
   /** Fragments the commute reason line is built from. */
@@ -397,7 +404,8 @@ const EN: Strings = {
           ? `Salted roads wet while you drive from ${time}.`
           : `Roads wet while you drive from ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  roadKey: "00–24 · red wet · amber salted · faded not driving",
+  roadKey: "red wet · amber salted · faded not driving",
+  roadRuns: (runs) => runText(runs, "wet", "salted"),
 
   commute: EN_PHRASES,
   cToday: "Today",
@@ -670,7 +678,8 @@ const NB: Strings = {
           ? `Saltede veier våte mens du kjører fra ${time}.`
           : `Våte veier mens du kjører fra ${time}.`,
   outDays: (streak, open) => `${streak}${open ? "+" : ""} d`,
-  roadKey: "00–24 · rød våt · gul saltet · blek kjører ikke",
+  roadKey: "rød våt · gul saltet · blek kjører ikke",
+  roadRuns: (runs) => runText(runs, "våt", "saltet"),
 
   commute: {
     rain: "regn",

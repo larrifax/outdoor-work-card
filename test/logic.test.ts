@@ -7,7 +7,10 @@ import {
   roadState,
   streakFrom,
   breakDay,
+  roadRuns,
+  type RoadCell,
 } from "../src/logic";
+import { strings } from "../src/i18n";
 import type { HourPoint } from "../src/types";
 
 const TZ = "Europe/Oslo";
@@ -269,6 +272,30 @@ test("wash: each day carries a 24-hour road strip", () => {
   expect([8, 9, 10].map((h) => at(h).wet)).toEqual([true, true, true]);
   expect(at(11).wet).toBe(false);
   expect(at(23).driving).toBe(false); // night
+  expect(thu.road.map((c) => c.h)).toEqual([...Array(24).keys()]);
+  expect(thu.roadRuns).toEqual([{ from: 8, to: 11, salted: false }]);
+  expect(r.days.find((d) => d.key === "2026-09-18")!.roadRuns).toEqual([]); // dry day: no line
+});
+
+test("wash: road runs split on salted state, end-exclusive, cut at midnight", () => {
+  const cell = (h: number, wet: boolean, salted = false): RoadCell => ({
+    t: h,
+    h,
+    wet,
+    salted,
+    driving: true,
+  });
+  const cells = [...Array(24).keys()].map((h) =>
+    cell(h, (h >= 6 && h < 11) || h >= 14, h >= 14 && h < 16),
+  );
+  const runs = roadRuns(cells);
+  expect(runs).toEqual([
+    { from: 6, to: 11, salted: false },
+    { from: 14, to: 16, salted: true },
+    { from: 16, to: 24, salted: false },
+  ]);
+  expect(strings("en").roadRuns(runs)).toBe("Wet 06–11 · salted 14–16 · wet 16–24");
+  expect(strings("nb").roadRuns(runs)).toBe("Våt 06–11 · saltet 14–16 · våt 16–24");
 });
 
 test("wash: roads dry at half speed overnight — 02:00 rain is still wet at 06:00, 01:00 rain is not", () => {
