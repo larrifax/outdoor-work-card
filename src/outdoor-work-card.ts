@@ -21,6 +21,7 @@ import {
   DANGER_WIND,
   DANGER_SNOW,
   GUST_FACTOR,
+  HEAD_FACTOR,
   ICY_NIGHT_MAX,
   ICY_NOW_MAX,
   SNOW_OK,
@@ -49,6 +50,10 @@ import { styles } from "./styles";
 import "./editor";
 
 const VERSION = "2.0.0";
+
+/** Wind number for a tile: felt wind, unless undirected wind alone makes the hour dangerous (tailwind). Matches `windLevel`. */
+const shownWind = (c: HourCell): number =>
+  c.eff > DANGER_WIND && c.feel <= DANGER_WIND ? c.eff : c.feel;
 
 declare global {
   interface Window {
@@ -376,7 +381,16 @@ export class OutdoorWorkCard extends LitElement {
           ></span
         ><span class="v">${t.popSnowUnit}</span>
       </div>
-      <div class="note">${t.popTileNote} ${t.popEffWind(Math.round(GUST_FACTOR * 100))}</div>
+      <div class="note">
+        ${t.popTileNote} ${t.popEffWind(Math.round(GUST_FACTOR * 100))}
+        ${
+          r.commute.routeInvalid
+            ? t.popBadRoute
+            : r.commute.bearing == null
+              ? t.popNoRoute
+              : t.popRoute(Math.round(r.commute.bearing) % 360, Math.round(HEAD_FACTOR * 100))
+        }
+      </div>
       <div class="h">${t.popScales}</div>
       <div class="scale">
         <span></span><span class="c0">${t.popFine}</span><span class="c1">${t.popTolerable}</span
@@ -596,7 +610,7 @@ export class OutdoorWorkCard extends LitElement {
                       }
                       <span class="val"
                         ><span class="ic${c.windLevel}">${icons.wind(11)}</span
-                        >${Math.round(c.eff)}</span
+                        >${Math.round(shownWind(c))}</span
                       >
                       <span
                         class="tip"
@@ -605,9 +619,10 @@ export class OutdoorWorkCard extends LitElement {
                         >${(c.snowDom ? t.cTileHintSnow : t.cTileHint)(
                           c.label,
                           (c.snowDom ? c.snow : c.mm).toFixed(1),
-                          String(Math.round(c.eff)),
+                          String(Math.round(shownWind(c))),
                           String(Math.round(c.wind)),
                           String(Math.round(c.gust)),
+                          c.dir ? t.cWindDir[c.dir] : undefined,
                         )}${
                           c.temp === null
                             ? nothing

@@ -5,7 +5,7 @@
  */
 import { zonedToUtc } from "./time";
 
-const RAD = Math.PI / 180;
+export const RAD = Math.PI / 180;
 
 /**
  * UTC ms of the moment the sun's centre passes `zenithDeg` in the evening,

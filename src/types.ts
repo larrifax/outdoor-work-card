@@ -78,6 +78,9 @@ export interface CardConfig {
   workdays?: number[];
   /** `input_boolean` / `switch` / `binary_sensor`: on = winter tyres (no icy-road badges). Empty = guess from weather. */
   winter_tyres_entity?: string;
+  /** Work location. When both are set, wind is weighted by head-/cross-/tailwind on the straight line home ↔ work (home = latitude/longitude). */
+  work_latitude?: number;
+  work_longitude?: number;
 }
 
 export interface HourPoint {
@@ -89,6 +92,8 @@ export interface HourPoint {
   wind: number;
   /** 10 m gust speed during this hour, m/s. Absent → treat as `wind`. */
   gust?: number;
+  /** 10 m wind direction, degrees the wind blows from (null when missing). */
+  windDir?: number | null;
   /** FAO reference evapotranspiration during this hour, mm (0 when missing). */
   et0: number;
   /** Snowfall during this hour, cm (0 when missing). Included in `mm` as water. */

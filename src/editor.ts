@@ -238,6 +238,21 @@ const COMMUTE = (e: EditorStrings, lang: Lang): Schema => [
     ],
   },
   {
+    type: "grid",
+    name: "",
+    schema: [
+      {
+        name: "work_latitude",
+        selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } },
+      },
+      {
+        name: "work_longitude",
+        selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } },
+      },
+    ],
+  },
+
+  {
     name: "winter_tyres_entity",
     selector: { entity: { domain: ["input_boolean", "switch", "binary_sensor"] } },
   },

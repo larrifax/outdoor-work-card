@@ -110,7 +110,14 @@ winter_tyres_entity: input_boolean.winter_tyres # optional: on = winter tyres
 
 Every commute hour gets a rain and a wind level: fine, tolerable, bad or **dangerous**. Wind is the **effective wind** — the 10 m mean, or 60% of the gust speed when gusts are unusually strong for the mean. In steady wind it equals the mean; `wind_fine` / `wind_ok` compare against it. Tap or hover a tile to see rain, effective, mean and gust values.
 
-An hour is dangerous when rain is above 8 mm/h or effective wind is above 14 m/s (≈ gusts above 23 m/s), whatever your thresholds are.
+**Head- and tailwind.** Set `work_latitude` / `work_longitude` (home is the card's `latitude` / `longitude`, default your HA home) and wind is judged against your direction of travel: the straight line home → work in the morning, reversed in the afternoon. A full headwind counts 40% more against `wind_fine` / `wind_ok`, a tailwind 40% less, crosswind as is. The tile shows that felt wind; its hint names the direction. Without work coordinates, direction is ignored.
+
+```yaml
+work_latitude: 59.9139
+work_longitude: 10.7522
+```
+
+An hour is dangerous when rain is above 8 mm/h or effective wind is above 14 m/s (≈ gusts above 23 m/s), whatever your thresholds are — and whatever the wind direction.
 
 **Snow** is split out of the precipitation (7 cm snow ≈ 10 mm water) and graded on its own fixed scale, whatever your preset: fine none · tolerable ≤ 0.5 cm/h · bad > 0.5 · dangerous > 3. The hour takes the worse of its rain part and its snow. When snow is more than half the precipitation, the tile shows a snowflake and cm instead of a drop and mm.
 
