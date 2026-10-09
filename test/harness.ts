@@ -90,8 +90,8 @@ const THEMES = {
   },
 } as const;
 
-/** Mounts all six cards themed; the "How … judged" popover is open on the first work and carwash card. */
-export async function mountThemed(theme: keyof typeof THEMES) {
+/** Mounts all six cards themed; by default the "How … judged" popover is open on the first work and carwash card. */
+export async function mountThemed(theme: keyof typeof THEMES, { info = true } = {}) {
   const host = document.createElement("div");
   host.style.cssText =
     "padding:24px;font-family:Roboto,system-ui,sans-serif;display:grid;grid-template-columns:repeat(2,480px);gap:24px";
@@ -118,6 +118,7 @@ export async function mountThemed(theme: keyof typeof THEMES) {
     .toBe(true);
 
   // Design F: capture the info popover open on one work + one carwash card.
+  if (!info) return grid;
   await grid.getByRole("button", { name: "How days are judged" }).first().click();
   await grid.getByRole("button", { name: "How evenings are judged" }).nth(1).click();
   return grid;

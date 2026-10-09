@@ -895,6 +895,8 @@ export class OutdoorWorkCard extends LitElement {
       <div
         class="cell r dryby"
         tabindex="0"
+        role="button"
+        aria-label=${`${d.short} ${d.dom} ${t.colDryBy}`}
         style=${styleMap({ "anchor-name": `--owc-dry-${i}` })}
         @pointerenter=${this._showTip}
         @pointerleave=${this._hideTip}
@@ -902,7 +904,11 @@ export class OutdoorWorkCard extends LitElement {
         @blur=${this._hideTip}
       >
         <span class="num" style=${styleMap({ color: cellColor })}>${cellTxt}</span>
-        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-dry-${i}` })}
+        <span
+          class="tip"
+          popover="hint"
+          role="tooltip"
+          style=${styleMap({ "position-anchor": `--owc-dry-${i}` })}
           >${t.dryByHead(d.wetAtStart.toFixed(1), hm(ref, r.tz))}${tipLines.map(
             (l) => html`<br />${l}`,
           )}</span
@@ -1031,6 +1037,8 @@ export class OutdoorWorkCard extends LitElement {
       <div
         class="day"
         tabindex="0"
+        role="button"
+        aria-label=${`${d.short} ${d.dom}: ${mm} · ${when}`}
         style=${styleMap({ "anchor-name": `--owc-day-${i}` })}
         @pointerenter=${this._showTip}
         @pointerleave=${this._hideTip}
@@ -1043,7 +1051,11 @@ export class OutdoorWorkCard extends LitElement {
         <span class="far-slot" title=${d.far ? t.cOutlook : nothing}
           >${d.far ? icons.uncertain(12) : nothing}</span
         >
-        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
+        <span
+          class="tip"
+          popover="hint"
+          role="tooltip"
+          style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
           >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz), d.salted)}
           ${
             d.road.length
@@ -1077,6 +1089,8 @@ export class OutdoorWorkCard extends LitElement {
       <div
         class="out"
         tabindex="0"
+        role="button"
+        aria-label=${`${d.short} ${d.dom} ${t.capOutlook}`}
         style=${styleMap({ "anchor-name": `--owc-out-${i}` })}
         @pointerenter=${this._showTip}
         @pointerleave=${this._hideTip}
@@ -1084,7 +1098,11 @@ export class OutdoorWorkCard extends LitElement {
         @blur=${this._hideTip}
       >
         <span class=${d.streak < 0 ? "none" : ""}>${out}</span>
-        <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-out-${i}` })}
+        <span
+          class="tip"
+          popover="hint"
+          role="tooltip"
+          style=${styleMap({ "position-anchor": `--owc-out-${i}` })}
           >${tip}</span
         >
       </div>

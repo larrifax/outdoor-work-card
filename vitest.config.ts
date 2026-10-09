@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { PW_PORT } from "./test/playwright-docker.ts";
+import { tap } from "./test/tap.ts";
 
 // Shared by both browser projects.
 const browser = {
@@ -29,7 +30,12 @@ export default defineConfig({
             ".claude/worktrees/**",
             "test/**/*.visual.test.ts",
           ],
-          browser: { ...browser, provider: playwright() },
+          browser: {
+            ...browser,
+            // hasTouch lets the tap command send real touch input; mouse input is unaffected.
+            provider: playwright({ contextOptions: { hasTouch: true } }),
+            commands: { tap },
+          },
         },
       },
       {
