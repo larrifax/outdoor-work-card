@@ -578,7 +578,7 @@ export class OutdoorWorkCard extends LitElement {
           })}
           tabindex="0"
           role="button"
-          aria-label=${d.reason}
+          aria-label=${`${d.full} ${d.dom}: ${d.reason}`}
           style=${styleMap({ "anchor-name": `--owc-g-${d.dayStart}` })}
           @pointerenter=${this._showTip}
           @pointerleave=${this._hideTip}
@@ -618,6 +618,8 @@ export class OutdoorWorkCard extends LitElement {
             <div
               class=${classMap({ tile: true, [`l${c.level}`]: true, passed: c.passed, missing: c.missing, icy: c.icy })}
               tabindex=${c.missing ? nothing : 0}
+              role=${c.missing ? nothing : "button"}
+              aria-label=${c.missing ? nothing : `${t.hpLeg[leg]} ${c.label}:00`}
               style=${styleMap({ "anchor-name": `--owc-h-${c.t}` })}
               @pointerenter=${c.missing ? nothing : this._showTip}
               @pointerleave=${c.missing ? nothing : this._hideTip}
@@ -681,6 +683,7 @@ export class OutdoorWorkCard extends LitElement {
     return html`<div
       class=${classMap({ tip: true, card: true, passed: c.passed, l3: L === 3 })}
       popover="hint"
+      role="tooltip"
       style=${styleMap({ "position-anchor": `--owc-h-${c.t}` })}
     >
       <div class="hp-h">
@@ -786,6 +789,7 @@ export class OutdoorWorkCard extends LitElement {
     return html`<div
       class="tip card dp"
       popover="hint"
+      role="tooltip"
       style=${styleMap({ "position-anchor": `--owc-g-${d.dayStart}` })}
     >
       <div class="dp-h">

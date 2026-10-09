@@ -1,30 +1,28 @@
 import { test, expect } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { mountThemed } from "./harness";
 
 // Pixel baselines; run via `pnpm test:visual` so Chromium comes from the pinned Docker image.
 for (const theme of ["dark", "light"] as const) {
   test(`cards look right in ${theme} mode`, async () => {
-    const host = await mountThemed(theme);
-    const shot = (name: string) =>
-      expect.element(page.elementLocator(host)).toMatchScreenshot(`${name}-${theme}`);
-    await shot("cards");
+    const grid = await mountThemed(theme);
+    await expect.element(grid).toMatchScreenshot(`cards-${theme}`);
 
-    // Commute popovers open: today's dangerous 17:00 hour, then Monday's day popover (outlook, warm layer).
-    // Hint popovers close each other, so one capture each: the commute card alone, with room above for the popover.
-    const cards = host.querySelectorAll<HTMLElement>("outdoor-work-card");
-    for (const c of cards) if (c !== cards[5]) c.style.display = "none";
-    cards[5]!.style.paddingTop = "300px";
-    const cRoot = cards[5]!.shadowRoot!;
-    const open = async (el: Element | undefined, name: string) => {
-      const tip = (el as HTMLElement).querySelector<HTMLElement>(":scope > .tip")!;
-      tip.showPopover();
-      await new Promise((r) => setTimeout(r, 250));
-      await shot(name);
-      tip.hidePopover();
+    // Commute popovers: today's dangerous 17:00 hour, then Monday's day popover (outlook, warm layer).
+    // The commute card alone, with room above for the popover.
+    const commute = grid.element().lastElementChild as HTMLElement;
+    const host = grid.element() as HTMLElement;
+    host.replaceChildren(commute);
+    commute.style.paddingTop = "300px";
+    // Rows run today first, so .first() is today's hour.
+    const open = async (name: string | RegExp, shot: string) => {
+      const target = page.getByRole("button", { name }).first();
+      await userEvent.hover(target);
+      await expect.element(page.getByRole("tooltip")).toBeVisible();
+      await expect.element(grid).toMatchScreenshot(`${shot}-${theme}`);
+      await userEvent.unhover(target);
     };
-    await open(cRoot.querySelectorAll(".crow:first-child .tile")[3], "hour-popover");
-    await open(cRoot.querySelectorAll(".crow > .gbadge")[3], "day-popover");
-    host.remove();
+    await open("Home 17:00", "hour-popover");
+    await open(/^Monday 21:/, "day-popover");
   });
 }

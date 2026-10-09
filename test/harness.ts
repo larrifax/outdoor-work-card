@@ -1,5 +1,6 @@
 // Shared setup for the browser tests: frozen clock, offline Open-Meteo, themed card grid.
-import { beforeAll, afterAll } from "vitest";
+import { beforeAll, afterAll, expect, onTestFinished } from "vitest";
+import { page } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
 import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
@@ -89,14 +90,16 @@ const THEMES = {
   },
 } as const;
 
+/** Mounts all six cards themed; the "How … judged" popover is open on the first work and carwash card. */
 export async function mountThemed(theme: keyof typeof THEMES) {
   const host = document.createElement("div");
   host.style.cssText =
     "padding:24px;font-family:Roboto,system-ui,sans-serif;display:grid;grid-template-columns:repeat(2,480px);gap:24px";
   for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
+  host.dataset["testid"] = `cards-${theme}`;
   document.body.appendChild(host);
+  onTestFinished(() => host.remove());
 
-  const cards: (HTMLElement & { _infoOpen?: boolean })[] = [];
   for (const c of configs) {
     const el = document.createElement("outdoor-work-card") as HTMLElement & {
       setConfig: (c: object) => void;
@@ -105,14 +108,17 @@ export async function mountThemed(theme: keyof typeof THEMES) {
     el.setConfig(c);
     host.appendChild(el);
     el.hass = hass;
-    cards.push(el);
   }
-  await customElements.whenDefined("outdoor-work-card");
-  // Let the async fetch + render chain settle.
-  await new Promise((r) => setTimeout(r, 1500));
+  const grid = page.getByTestId(`cards-${theme}`);
+  // Settled once every card has rendered (info button) and none is still fetching.
+  const infoBtns = grid.getByRole("button", { name: /^How / });
+  const fetching = grid.getByText(/^Fetching forecast/);
+  await expect
+    .poll(() => infoBtns.elements().length === configs.length && !fetching.query())
+    .toBe(true);
+
   // Design F: capture the info popover open on one work + one carwash card.
-  cards[0]!._infoOpen = true;
-  cards[3]!._infoOpen = true;
-  await new Promise((r) => setTimeout(r, 100));
-  return host;
+  await grid.getByRole("button", { name: "How days are judged" }).first().click();
+  await grid.getByRole("button", { name: "How evenings are judged" }).nth(1).click();
+  return grid;
 }
