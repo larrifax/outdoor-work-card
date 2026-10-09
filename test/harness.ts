@@ -1,0 +1,118 @@
+// Shared setup for the browser tests: frozen clock, offline Open-Meteo, themed card grid.
+import { beforeAll, afterAll } from "vitest";
+// Importing entry registers <outdoor-work-card> as a side effect.
+import "../src/outdoor-work-card";
+import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
+
+// Minimal <ha-card> so the bundle renders outside Home Assistant.
+beforeAll(() => {
+  if (!customElements.get("ha-card"))
+    customElements.define("ha-card", class extends HTMLElement {});
+});
+
+// Freeze the clock: Wed 16 Sep 2026, 16:00 Europe/Oslo (14:00Z).
+const REAL_NOW = Date.now;
+const FAKE_NOW = Date.UTC(2026, 8, 16, 14, 0);
+beforeAll(() => {
+  Date.now = () => FAKE_NOW;
+});
+afterAll(() => {
+  Date.now = REAL_NOW;
+});
+
+// Mock Open-Meteo fetch so the render path runs offline; latitude picks scenario.
+const REAL_FETCH = globalThis.fetch;
+beforeAll(() => {
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = new URL(String(url));
+    const lat = parseFloat(u.searchParams.get("latitude") ?? "0");
+    const body =
+      Math.abs(lat - 59.93) < 0.001
+        ? COMMUTE
+        : Math.abs(lat - 59.92) < 0.001
+          ? RAINY
+          : Math.abs(lat - 59.9) < 0.001
+            ? TONIGHT
+            : GOOD;
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+});
+afterAll(() => {
+  globalThis.fetch = REAL_FETCH;
+});
+
+const hass = { config: { latitude: 59.91, longitude: 10.75, time_zone: "Europe/Oslo" } };
+const configs = [
+  { type: "custom:outdoor-work-card", mode: "work" },
+  {
+    type: "custom:outdoor-work-card",
+    mode: "work",
+    latitude: 59.92,
+    title: "Outdoor Work (rainy week)",
+  },
+  {
+    type: "custom:outdoor-work-card",
+    mode: "carwash",
+    latitude: 59.9,
+    title: "Car Wash (wash tonight)",
+  },
+  { type: "custom:outdoor-work-card", mode: "carwash" },
+  {
+    type: "custom:outdoor-work-card",
+    mode: "carwash",
+    latitude: 59.92,
+    title: "Car Wash (rainy week)",
+  },
+  { type: "custom:outdoor-work-card", mode: "commute", latitude: 59.93 },
+];
+
+// HA-ish theme vars per appearance (mirrors the old harness.html).
+const THEMES = {
+  dark: {
+    background: "#0d1117",
+    "--primary-text-color": "#e8eaed",
+    "--secondary-text-color": "#9aa2ad",
+    "--divider-color": "rgba(255,255,255,.08)",
+    "--ha-card-background": "#171b24",
+    "--ha-card-border-radius": "16px",
+  },
+  light: {
+    background: "#f2f3f5",
+    "--primary-text-color": "#1c1c1e",
+    "--secondary-text-color": "#5f6570",
+    "--divider-color": "rgba(0,0,0,.08)",
+    "--ha-card-background": "#ffffff",
+    "--ha-card-border-radius": "16px",
+  },
+} as const;
+
+export async function mountThemed(theme: keyof typeof THEMES) {
+  const host = document.createElement("div");
+  host.style.cssText =
+    "padding:24px;font-family:Roboto,system-ui,sans-serif;display:grid;grid-template-columns:repeat(2,480px);gap:24px";
+  for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
+  document.body.appendChild(host);
+
+  const cards: (HTMLElement & { _infoOpen?: boolean })[] = [];
+  for (const c of configs) {
+    const el = document.createElement("outdoor-work-card") as HTMLElement & {
+      setConfig: (c: object) => void;
+      hass: unknown;
+    };
+    el.setConfig(c);
+    host.appendChild(el);
+    el.hass = hass;
+    cards.push(el);
+  }
+  await customElements.whenDefined("outdoor-work-card");
+  // Let the async fetch + render chain settle.
+  await new Promise((r) => setTimeout(r, 1500));
+  // Design F: capture the info popover open on one work + one carwash card.
+  cards[0]!._infoOpen = true;
+  cards[3]!._infoOpen = true;
+  await new Promise((r) => setTimeout(r, 100));
+  return host;
+}
