@@ -194,26 +194,28 @@ export interface Strings {
   /** Grade F overrides the light-indexed caption/verdict. */
   cCaptionF: string;
   cVerdictF: string;
-  /** Tile hint: hour, rain, shown/mean/gust wind (pre-formatted), wind direction word when weighted by the ride. */
-  cTileHint: (
-    hh: string,
-    mm: string,
-    eff: string,
-    mean: string,
-    gust: string,
-    dir?: string,
-  ) => string;
-  /** Tile hint for a snow-dominated hour: snowfall in cm. */
-  cTileHintSnow: (
-    hh: string,
-    cm: string,
-    eff: string,
-    mean: string,
-    gust: string,
-    dir?: string,
-  ) => string;
-  /** Second hint line: temperature, plus the icy suffix. */
-  cHintTemp: (temp: string, icy: boolean) => string;
+  /** Hour popover: leg name, verdict word per level (passed hours use the past form), stat labels. */
+  hpLeg: { work: string; home: string };
+  hpLevel: [string, string, string, string];
+  hpWas: [string, string, string, string];
+  hpPassed: string;
+  hpTemp: string;
+  hpRain: string;
+  hpSnow: string;
+  hpFeltWind: string;
+  hpWind: string;
+  hpNoData: string;
+  /** Hour verdict cause when nothing is off. */
+  cCalm: string;
+  /** Icy line: bold head, detail. */
+  hpIcy: [string, string];
+  /** Clothing: outfit names (0 summer … 4 full winter) and the add-ons. Leg-specific add-ons name the leg. */
+  clOutfit: [string, string, string, string, string];
+  clRain: (leg?: "work" | "home") => string;
+  clWarm: (leg: "work" | "home") => string;
+  clWind: (leg: "work" | "home") => string;
+  /** Day popover leg temperature label. */
+  dpLeg: { work: string; home: string };
   cNoDays: string;
   cNextWeek: string;
   cOutlook: string;
@@ -252,8 +254,11 @@ export interface Strings {
   popNoRoute: string;
   /** Rules note when work coordinates are set but unusable. */
   popBadRoute: string;
-  /** Tile hint suffix per wind direction relative to the ride. */
+  /** Wind direction relative to the ride. */
   cWindDir: Record<"head" | "cross" | "tail", string>;
+  popClothing: string;
+  popClothingFelt: (perDeg: number) => string;
+  popClothingRules: (rainMm: number, windHi: number, windLo: number) => string;
   popSnowUnit: string;
   popSnowLabel: string;
   popSnowLine: (ok: number, danger: number) => string;
@@ -436,14 +441,26 @@ const EN: Strings = {
   cVerdict: ["Bike", "Bike if you can bear it", "Take the home office"],
   cCaptionF: "Dangerous to ride",
   cVerdictF: "Don't bike",
-  cTileHint: (hh, mm, eff, mean, gust, dir) =>
-    `${hh}:00 · ${mm} mm · ${dir ? `${dir}, feels ${eff}` : `wind ${eff}`} m/s (mean ${mean}, gusts ${gust})`,
-  cTileHintSnow: (hh, cm, eff, mean, gust, dir) =>
-    `${hh}:00 · ${cm} cm snow · ${dir ? `${dir}, feels ${eff}` : `wind ${eff}`} m/s (mean ${mean}, gusts ${gust})`,
-  cHintTemp: (temp, icy) => `${temp} °C${icy ? ", wet earlier" : ""}`,
+  hpLeg: { work: "To work", home: "Home" },
+  hpLevel: ["Fine", "Tolerable", "Bad", "Dangerous"],
+  hpWas: ["Was fine", "Was tolerable", "Was bad", "Was dangerous"],
+  hpPassed: "Passed",
+  hpTemp: "Temperature",
+  hpRain: "Rain",
+  hpSnow: "Snow",
+  hpFeltWind: "Felt wind",
+  hpWind: "Wind",
+  hpNoData: "no data",
+  cCalm: "dry and calm",
+  hpIcy: ["Icy roads possible", "wet earlier, cold night"],
+  clOutfit: ["Summer kit", "Light jacket", "Jacket, gloves", "Winter jacket", "Full winter"],
+  clRain: (leg) => (leg ? `rain gear ${leg === "work" ? "to work" : "home"}` : "rain gear"),
+  clWarm: (leg) => `warm layer ${leg === "work" ? "morning" : "afternoon"}`,
+  clWind: (leg) => `wind jacket in bag ${leg === "work" ? "to work" : "home"}`,
+  dpLeg: { work: "To work", home: "Home" },
   cNoDays: "No commute days in the forecast.",
   cNextWeek: "Next week",
-  cOutlook: "outlook",
+  cOutlook: "Outlook · forecast may still change",
   cDone: "done",
   cColDay: "Day",
   cColGrade: "Grade",
@@ -477,7 +494,12 @@ const EN: Strings = {
   popNoRoute: "Set work_latitude / work_longitude to weigh headwind and tailwind.",
   popBadRoute:
     "work_latitude / work_longitude ignored: set both, within ±90 / ±180, and away from home. Wind direction is not weighed.",
-  cWindDir: { head: "headwind", cross: "crosswind", tail: "tailwind" },
+  cWindDir: { head: "Headwind", cross: "Crosswind", tail: "Tailwind" },
+  popClothing: "Clothing",
+  popClothingFelt: (per) =>
+    `Felt temperature = air − 1 °C per ${per} m/s felt wind, at the leg's coldest hour.`,
+  popClothingRules: (mm, hi, lo) =>
+    `One outfit for the day, from the colder leg. Legs more than one step apart: one step lighter, plus a warm layer for the colder leg. Rain gear from ${mm} mm/h or any snow. Wind jacket in bag on light days when one leg has ≥ ${hi} m/s felt wind and the other < ${lo}.`,
   popSnowUnit: "snowfall, cm/h (when snow dominates)",
   popSnowLabel: "snow",
   popSnowLine: (ok, danger) =>
@@ -739,14 +761,26 @@ const NB: Strings = {
   cVerdict: ["Sykle", "Sykle om du tåler det", "Ta hjemmekontor"],
   cCaptionF: "Farlig å sykle",
   cVerdictF: "Ikke sykle",
-  cTileHint: (hh, mm, eff, mean, gust, dir) =>
-    `${hh}:00 · ${mm} mm · ${dir ? `${dir}, føles ${eff}` : `vind ${eff}`} m/s (middel ${mean}, kast ${gust})`,
-  cTileHintSnow: (hh, cm, eff, mean, gust, dir) =>
-    `${hh}:00 · ${cm} cm snø · ${dir ? `${dir}, føles ${eff}` : `vind ${eff}`} m/s (middel ${mean}, kast ${gust})`,
-  cHintTemp: (temp, icy) => `${temp} °C${icy ? ", vått tidligere" : ""}`,
+  hpLeg: { work: "Til jobb", home: "Hjem" },
+  hpLevel: ["Fint", "Tålelig", "Dårlig", "Farlig"],
+  hpWas: ["Var fint", "Var tålelig", "Var dårlig", "Var farlig"],
+  hpPassed: "Forbi",
+  hpTemp: "Temperatur",
+  hpRain: "Regn",
+  hpSnow: "Snø",
+  hpFeltWind: "Følt vind",
+  hpWind: "Vind",
+  hpNoData: "ingen data",
+  cCalm: "tørt og rolig",
+  hpIcy: ["Mulig glatt vei", "vått tidligere, kald natt"],
+  clOutfit: ["Sommerantrekk", "Lett jakke", "Jakke, hansker", "Vinterjakke", "Full vinter"],
+  clRain: (leg) => (leg ? `regntøy ${leg === "work" ? "til jobb" : "hjem"}` : "regntøy"),
+  clWarm: (leg) => `varmt lag ${leg === "work" ? "om morgenen" : "om ettermiddagen"}`,
+  clWind: (leg) => `vindjakke i sekken ${leg === "work" ? "til jobb" : "hjem"}`,
+  dpLeg: { work: "Til jobb", home: "Hjem" },
   cNoDays: "Ingen pendledager i varselet.",
   cNextWeek: "Neste uke",
-  cOutlook: "utsikter",
+  cOutlook: "Utsikter · varselet kan endre seg",
   cDone: "ferdig",
   cColDay: "Dag",
   cColGrade: "Karakter",
@@ -780,7 +814,12 @@ const NB: Strings = {
   popNoRoute: "Sett work_latitude / work_longitude for å vekte motvind og medvind.",
   popBadRoute:
     "work_latitude / work_longitude ignoreres: sett begge, innenfor ±90 / ±180, og et stykke fra hjemme. Vindretning vektes ikke.",
-  cWindDir: { head: "motvind", cross: "sidevind", tail: "medvind" },
+  cWindDir: { head: "Motvind", cross: "Sidevind", tail: "Medvind" },
+  popClothing: "Klær",
+  popClothingFelt: (per) =>
+    `Følt temperatur = luft − 1 °C per ${per} m/s følt vind, i turens kaldeste time.`,
+  popClothingRules: (mm, hi, lo) =>
+    `Ett antrekk for dagen, fra den kaldeste turen. Turer mer enn ett trinn fra hverandre: ett trinn lettere, pluss et varmt lag til den kaldeste. Regntøy fra ${mm} mm/t eller snø. Vindjakke i sekken på lette dager når én tur har ≥ ${hi} m/s følt vind og den andre < ${lo}.`,
   popSnowUnit: "snøfall, cm/t (når snø dominerer)",
   popSnowLabel: "snø",
   popSnowLine: (ok, danger) =>

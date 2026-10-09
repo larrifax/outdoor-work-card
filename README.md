@@ -108,7 +108,7 @@ workdays: [1, 2, 3, 4, 5] # ISO weekdays
 winter_tyres_entity: input_boolean.winter_tyres # optional: on = winter tyres
 ```
 
-Every commute hour gets a rain and a wind level: fine, tolerable, bad or **dangerous**. Wind is the **effective wind** — the 10 m mean, or 60% of the gust speed when gusts are unusually strong for the mean. In steady wind it equals the mean; `wind_fine` / `wind_ok` compare against it. Tap or hover a tile to see rain, effective, mean and gust values.
+Every commute hour gets a rain and a wind level: fine, tolerable, bad or **dangerous**. Wind is the **effective wind** — the 10 m mean, or 60% of the gust speed when gusts are unusually strong for the mean. In steady wind it equals the mean; `wind_fine` / `wind_ok` compare against it. Tap or hover a tile for its popover: verdict and cause, what to wear for that hour, temperature, rain or snow, and felt wind with direction and mean (gust) wind.
 
 **Head- and tailwind.** Set `work_latitude` / `work_longitude` (home is the card's `latitude` / `longitude`, default your HA home) and wind is judged against your direction of travel: the straight line home → work in the morning, reversed in the afternoon. A full headwind counts 40% more against `wind_fine` / `wind_ok`, a tailwind 40% less, crosswind as is. The tile shows that felt wind; its hint names the direction. Without work coordinates, direction is ignored.
 
@@ -147,6 +147,20 @@ The editor's **Rider type** picker fills the four thresholds; you can then fine-
 | All-weather        | 0.5         | 2.0       | 8           | 12        |
 
 Values are 10 m model winds; don't correct them to rider height.
+
+**Clothing.** The hero suggests one outfit for the day; tap a day's grade badge for the same summary of that day. Each leg is judged at its coldest hour by felt temperature (air − 1 °C per 3 m/s felt wind):
+
+| Felt temperature | Outfit         |
+| ---------------- | -------------- |
+| ≥ 18 °C          | Summer kit     |
+| 12–18 °C         | Light jacket   |
+| 6–12 °C          | Jacket, gloves |
+| 0–6 °C           | Winter jacket  |
+| < 0 °C           | Full winter    |
+
+The day outfit comes from the colder leg. Legs more than one step apart get one step lighter plus a "warm layer" for the colder leg. Add-ons: "rain gear" (per leg) from 0.3 mm/h or any snow; "wind jacket in bag" on light-jacket days when one leg has ≥ 6 m/s felt wind and the other < 3. Each hour popover shows what that hour alone calls for. Thresholds are fixed for now; the ⓘ popover lists them.
+
+Days more than about 60 hours ahead show a cloud-with-question-mark icon: the forecast may still change. The same icon marks outlook days in work and car-wash mode.
 
 > Upgrading: `rain_ok` now defaults to 0.8 (was 1.0), `wind_*` compare against effective wind, midday no longer changes the grade, and there's a new F grade.
 

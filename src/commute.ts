@@ -263,6 +263,19 @@ export const EN_PHRASES: CommutePhrases = {
   noData: "no forecast yet",
 };
 
+/** Cause fragments for a window or an hour: precipitation from the worse of rain and snow (snow wins a tie), then wind, then icy. */
+export function causeWords(
+  w: { rain: Level; snow: Level; wind: Level; icy: boolean },
+  ph: CommutePhrases,
+): string[] {
+  const rain = ["", ph.lightRain, ph.rain, ph.cloudburst];
+  const wind = ["", ph.breezy, ph.strongWind, ph.dangerousGusts];
+  const snow = ["", ph.lightSnow, ph.snow, ph.heavySnow];
+  return [w.snow >= w.rain ? snow[w.snow] : rain[w.rain], wind[w.wind], w.icy ? ph.icy : ""].filter(
+    (x): x is string => !!x,
+  );
+}
+
 /** Day grade from the two commute levels: any dangerous → F, then how many are bad / tolerable. */
 export function gradeDay(toWork: Level, home: Level): Grade {
   const [lo, hi] = toWork < home ? [toWork, home] : [home, toWork];
@@ -340,9 +353,6 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
   for (const h of hours) byT.set(h.t, h);
 
   const worse = (a: Level, b: Level): Level => (a > b ? a : b);
-  const rainWords = ["", ph.lightRain, ph.rain, ph.cloudburst];
-  const windWords = ["", ph.breezy, ph.strongWind, ph.dangerousGusts];
-  const snowWords = ["", ph.lightSnow, ph.snow, ph.heavySnow];
   /** Precipitation split: total mm, snowfall cm, snow water mm, rain part mm. */
   const split = (p: HourPoint | undefined) => {
     const mm = p?.mm ?? 0;
@@ -490,15 +500,7 @@ export function planCommute(hours: HourPoint[], now: number, o: CommuteOptions):
     const grade = gradeDay(toWork.level, home.level);
     const midday = middayFor(p.y, p.m, p.d, o.midday, grade);
 
-    // Precipitation words from the worse of rain and snow (snow wins a tie), then wind, then icy.
-    const words = (w: CommuteWindow): string =>
-      [
-        w.snow >= w.rain ? snowWords[w.snow] : rainWords[w.rain],
-        windWords[w.wind],
-        w.icy ? ph.icy : "",
-      ]
-        .filter(Boolean)
-        .join(ph.and);
+    const words = (w: CommuteWindow): string => causeWords(w, ph).join(ph.and);
     const bits: string[] = [];
     if (toWork.level || toWork.icy) bits.push(ph.toWork(words(toWork)));
     if (home.level || home.icy) bits.push(ph.home(words(home)));

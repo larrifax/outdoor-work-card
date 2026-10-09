@@ -32,6 +32,8 @@ import {
   type CommuteDay,
   type CommuteWindow,
   type HourCell,
+  type Level,
+  causeWords,
 } from "./commute";
 import { hm, hLabel, localParts, hh } from "./time";
 import {
@@ -45,6 +47,16 @@ import {
   type Ctx,
 } from "./present";
 import { icons, taskIcon } from "./icons";
+import {
+  dayPlan,
+  hourOutfit,
+  OUTFIT_MIN,
+  WIND_PER_DEGREE,
+  RAIN_GEAR_MM,
+  WIND_JACKET_HI,
+  WIND_JACKET_LO,
+  type Leg,
+} from "./clothing";
 import { strings, type Strings, type WashKind } from "./i18n";
 import { styles } from "./styles";
 import "./editor";
@@ -54,6 +66,8 @@ const VERSION = "2.1.0";
 /** Wind number for a tile: felt wind, unless undirected wind alone makes the hour dangerous (tailwind). Matches `windLevel`. */
 const shownWind = (c: HourCell): number =>
   c.eff > DANGER_WIND && c.feel <= DANGER_WIND ? c.eff : c.feel;
+
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 declare global {
   interface Window {
@@ -433,6 +447,26 @@ export class OutdoorWorkCard extends LitElement {
         ${t.popCommuteNote(fmt(r.commute.toWork[0]), fmt(r.commute.toWork[1]), fmt(r.commute.home[0]), fmt(r.commute.home[1]))}
         ${t.popMidday}
       </div>
+      <div class="h">${t.popClothing}</div>
+      <div class="grades cl">
+        ${t.clOutfit.map(
+          (name, i) =>
+            html`<span class="mono"
+                >${
+                  i === 0
+                    ? `≥ ${OUTFIT_MIN[0]}`
+                    : i === 4
+                      ? `< ${OUTFIT_MIN[3]}`
+                      : `${OUTFIT_MIN[i]}–${OUTFIT_MIN[i - 1]}`
+                }
+                °C</span
+              ><span>${name}</span>`,
+        )}
+      </div>
+      <div class="note">
+        ${t.popClothingFelt(WIND_PER_DEGREE)}
+        ${t.popClothingRules(RAIN_GEAR_MM, WIND_JACKET_HI, WIND_JACKET_LO)}
+      </div>
       <div class="src">${t.popSrc(model)}</div>
     `;
   }
@@ -481,21 +515,8 @@ export class OutdoorWorkCard extends LitElement {
         ${icons.info(16)}
         <div>${t.cNoDays}</div>
       </div>`;
-    const L = first.light;
-    const isF = first.grade === "F";
-    const caption = isF ? t.cCaptionF : t.cCaption[L];
-    const verdict = isF ? t.cVerdictF : t.cVerdict[L];
-    const why = first.reason.charAt(0).toUpperCase() + first.reason.slice(1);
-
     return html`
-      <div class=${classMap({ chero: true, [`l${L}`]: true, f: isF })}>
-        <div class=${classMap({ gbadge: true, [`l${L}`]: true, f: isF })}>${first.grade}</div>
-        <div>
-          <div class="cap">${caption}</div>
-          <div class="t">${first.full} · ${verdict}</div>
-          <div class="d">${why}</div>
-        </div>
-      </div>
+      ${this._dayHead(first, t, false)}
 
       <div class="cgrid ccols">
         <span>${t.cColDay}</span><span class="c">${t.cColGrade}</span>
@@ -539,20 +560,34 @@ export class OutdoorWorkCard extends LitElement {
       >
         <div class="cell l">
           <span class="dn">${d.short}</span><span class="dd">${d.dom}</span>
-          ${d.far ? html`<span class="nt">${t.cOutlook}</span>` : d.done ? html`<span class="nt">${t.cDone}</span>` : nothing}
+          ${
+            d.far
+              ? html`<span class="nt far" title=${t.cOutlook}>${icons.uncertain(12)}</span>`
+              : d.done
+                ? html`<span class="nt">${t.cDone}</span>`
+                : nothing
+          }
         </div>
         <div
           class=${classMap({
             gbadge: true,
+            tap: true,
             [`l${d.light}`]: !d.unknown,
             f: !d.unknown && d.grade === "F",
             unknown: d.unknown,
           })}
-          title=${d.reason}
+          tabindex="0"
+          role="button"
+          aria-label=${d.reason}
+          style=${styleMap({ "anchor-name": `--owc-g-${d.dayStart}` })}
+          @pointerenter=${this._showTip}
+          @pointerleave=${this._hideTip}
+          @focus=${this._showTip}
+          @blur=${this._hideTip}
         >
-          ${d.unknown ? "?" : d.grade}
+          ${d.unknown ? "?" : d.grade} ${this._dayCard(d, t)}
         </div>
-        ${this._tiles(d.toWork, t)}
+        ${this._tiles(d.toWork, "work", t)}
         <div class=${classMap({ mid: true, flag: d.midday.flag })} title=${d.reason}>
           ${
             d.midday.snowDom
@@ -570,12 +605,12 @@ export class OutdoorWorkCard extends LitElement {
                   <span class="val tot">Σ ${d.midday.total.toFixed(1)}</span>`
           }
         </div>
-        ${this._tiles(d.home, t)}
+        ${this._tiles(d.home, "home", t)}
       </div>
     `;
   }
 
-  private _tiles(w: CommuteWindow, t: Strings): TemplateResult {
+  private _tiles(w: CommuteWindow, leg: Leg, t: Strings): TemplateResult {
     return html`
       <div class="tiles">
         ${w.cells.map(
@@ -612,23 +647,7 @@ export class OutdoorWorkCard extends LitElement {
                         ><span class="ic${c.windLevel}">${icons.wind(11)}</span
                         >${Math.round(shownWind(c))}</span
                       >
-                      <span
-                        class="tip"
-                        popover="hint"
-                        style=${styleMap({ "position-anchor": `--owc-h-${c.t}` })}
-                        >${(c.snowDom ? t.cTileHintSnow : t.cTileHint)(
-                          c.label,
-                          (c.snowDom ? c.snow : c.mm).toFixed(1),
-                          String(Math.round(shownWind(c))),
-                          String(Math.round(c.wind)),
-                          String(Math.round(c.gust)),
-                          c.dir ? t.cWindDir[c.dir] : undefined,
-                        )}${
-                          c.temp === null
-                            ? nothing
-                            : html`<br />${t.cHintTemp(String(Math.round(c.temp)), c.icy)}`
-                        }</span
-                      >
+                      ${this._hourCard(c, leg, t)}
                     `
               }
             </div>
@@ -636,6 +655,156 @@ export class OutdoorWorkCard extends LitElement {
         )}
       </div>
     `;
+  }
+
+  /** Hour popover: verdict and cause, this hour's clothing, icy line, then temperature, precipitation and wind. */
+  private _hourCard(c: HourCell, leg: Leg, t: Strings): TemplateResult {
+    const L = c.level;
+    const precip = Math.max(c.rain, c.snowLevel) as Level;
+    const causes = causeWords(
+      { rain: c.rain, snow: c.snowLevel, wind: c.windLevel, icy: false },
+      t.commute,
+    );
+    const cause = causes.length ? causes.join(", ") : t.cCalm;
+    const icon =
+      L === 3
+        ? icons.alert(15)
+        : precip && precip >= c.windLevel
+          ? c.snowDom
+            ? icons.snowflake(15)
+            : icons.rain(15)
+          : c.windLevel
+            ? icons.wind(15)
+            : icons.sun(15);
+    const wear = hourOutfit(c);
+    const wind = Math.round(shownWind(c));
+    return html`<div
+      class=${classMap({ tip: true, card: true, passed: c.passed, l3: L === 3 })}
+      popover="hint"
+      style=${styleMap({ "position-anchor": `--owc-h-${c.t}` })}
+    >
+      <div class="hp-h">
+        <b>${c.label}:00</b>
+        <span
+          >${c.passed ? html`<span class="pill">${t.hpPassed}</span>` : nothing}${t.hpLeg[leg]}</span
+        >
+      </div>
+      <div class=${classMap({ "hp-v": true, band: L === 3 })}>
+        <span class="vi l${L}">${icon}</span>
+        <div>
+          <b class="l${L}">${(c.passed ? t.hpWas : t.hpLevel)[L]}</b> · ${cap(cause)}
+          ${wear ? this._cloth(t.clOutfit[wear.level], wear.rain ? [t.clRain()] : []) : nothing}
+        </div>
+      </div>
+      ${
+        c.icy
+          ? html`<div class="hp-icy">
+              ${icons.snowflake(12)}<span><b>${t.hpIcy[0]}</b> · ${t.hpIcy[1]}</span>
+            </div>`
+          : nothing
+      }
+      <div class="hp-s">
+        <div class="hp-r">
+          ${icons.thermo(12)}<span class="lb">${t.hpTemp}</span>${
+            c.temp === null
+              ? html`<span>${t.hpNoData}</span>`
+              : html`<span class=${classMap({ n: true, ice: c.icy })}
+                  >${Math.round(c.temp)} <small>°C</small></span
+                >`
+          }
+        </div>
+        <div class="hp-r l${precip}">
+          ${c.snowDom ? icons.snowflake(12) : icons.drop(12)}<span class="lb"
+            >${c.snowDom ? t.hpSnow : t.hpRain}</span
+          ><span class="n"
+            >${(c.snowDom ? c.snow : c.mm).toFixed(1)}
+            <small>${c.snowDom ? "cm" : "mm"}</small></span
+          >
+        </div>
+        <div class="hp-r hp-w l${c.windLevel}">
+          <div class="top">
+            ${icons.wind(12)}<span class="lb">${c.dir ? t.hpFeltWind : t.hpWind}</span
+            ><span class="n">${wind} <small>m/s</small></span>
+          </div>
+          <div class="sub">
+            ${
+              c.dir
+                ? html`<span class="dir ${c.dir}"
+                    ><span class="arr">${icons.dirArrow(11)}</span>${t.cWindDir[c.dir]}</span
+                  >`
+                : html`<span></span>`
+            }
+            <span>${Math.round(c.wind)} (${Math.round(c.gust)}) m/s</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /** Clothing line: shirt icon, bold outfit, muted add-ons. */
+  private _cloth(outfit: string, extra: string[]): TemplateResult {
+    return html`<div class="cloth">
+      ${icons.shirt(12)}<b>${outfit}</b>${extra.length ? html`<span>· ${extra.join(", ")}</span>` : nothing}
+    </div>`;
+  }
+
+  private _dayCloth(d: CommuteDay, t: Strings): TemplateResult | typeof nothing {
+    const p = dayPlan(d);
+    if (!p) return nothing;
+    const extra = [
+      ...(p.rain.length === 2 ? [t.clRain()] : p.rain.map((l) => t.clRain(l))),
+      ...(p.warm ? [t.clWarm(p.warm)] : []),
+      ...(p.wind ? [t.clWind(p.wind)] : []),
+    ];
+    return this._cloth(t.clOutfit[p.level], extra);
+  }
+
+  /** Grade badge + caption, verdict, reason and clothing: today's hero, and (smaller) the day popover. */
+  private _dayHead(d: CommuteDay, t: Strings, mini: boolean): TemplateResult {
+    const L = d.light;
+    const isF = d.grade === "F";
+    const caption = isF ? t.cCaptionF : t.cCaption[L];
+    const verdict = isF ? t.cVerdictF : t.cVerdict[L];
+    return html`<div class=${classMap({ chero: true, mini, [`l${L}`]: true, f: isF })}>
+      <div
+        class=${classMap({ gbadge: true, [`l${L}`]: !d.unknown, f: !d.unknown && isF, unknown: d.unknown })}
+      >
+        ${d.unknown ? "?" : d.grade}
+      </div>
+      <div>
+        <div class="cap">${caption}</div>
+        <div class="t">${mini ? verdict : html`${d.full} · ${verdict}`}</div>
+        <div class="d">${cap(d.reason)}</div>
+        ${this._dayCloth(d, t)}
+      </div>
+    </div>`;
+  }
+
+  /** Day popover on a row's grade badge. */
+  private _dayCard(d: CommuteDay, t: Strings): TemplateResult {
+    const temps = dayPlan(d)?.temps;
+    return html`<div
+      class="tip card dp"
+      popover="hint"
+      style=${styleMap({ "position-anchor": `--owc-g-${d.dayStart}` })}
+    >
+      <div class="dp-h">
+        <span><b>${d.full}</b>${d.short} ${d.dom}</span>
+        ${
+          temps
+            ? html`<span class="tt">
+                ${(["work", "home"] as const).map((l) =>
+                  temps[l] === null
+                    ? nothing
+                    : html`<span>${t.dpLeg[l]} <b>${Math.round(temps[l]!)} °C</b></span>`,
+                )}
+              </span>`
+            : nothing
+        }
+      </div>
+      ${this._dayHead(d, t, true)}
+      ${d.far ? html`<div class="dp-n">${icons.uncertain(12)}${t.cOutlook}</div>` : nothing}
+    </div>`;
   }
 
   // ---- work mode ----------------------------------------------------------
@@ -714,7 +883,11 @@ export class OutdoorWorkCard extends LitElement {
     const winLabel = windowLabel(d, t);
 
     return html` <div class="grid row ${classMap({ today: d.isToday, far: d.far })}">
-      <div class="cell l"><span class="dn">${d.short}</span><span class="dd">${d.dom}</span></div>
+      <div class="cell l">
+        <span class="dn">${d.short}</span
+        ><span class="dd">${d.dom}</span
+        >${d.far ? html`<span class="nt far" title=${t.cOutlook}>${icons.uncertain(11)}</span>` : nothing}
+      </div>
       <div
         class="cell r dryby"
         tabindex="0"
@@ -863,6 +1036,9 @@ export class OutdoorWorkCard extends LitElement {
         <div class="ic ${d.icon}">${icons[d.icon](20)}</div>
         <span class="mm ${d.clean ? "" : "bad"}">${mm}</span>
         <span class="when">${when}</span>
+        <span class="far-slot" title=${d.far ? t.cOutlook : nothing}
+          >${d.far ? icons.uncertain(12) : nothing}</span
+        >
         <span class="tip" popover="hint" style=${styleMap({ "position-anchor": `--owc-day-${i}` })}
           >${t.washInfo(kind, d.wetFrom === null || !r ? "" : hm(d.wetFrom, r.tz), d.salted)}
           ${

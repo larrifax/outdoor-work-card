@@ -1100,4 +1100,342 @@ export const styles = css`
       font-size: 26px;
     }
   }
+  /* ----- commute popovers (hour tile, day grade badge) ----- */
+  /* Card-style hint: card colours instead of the inverted tooltip; text-align left, fixed width. */
+  .tip.card {
+    width: 220px;
+    max-width: none;
+    padding: 11px 13px;
+    border-radius: 12px;
+    border: 1px solid var(--owc-line);
+    background: var(--ha-card-background, var(--card-background-color, #1d222c));
+    color: var(--owc-text);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    text-align: left;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .tip.card:popover-open {
+    display: flex;
+  }
+  .tip.card::after {
+    display: none;
+  }
+  .tip.card.l3 {
+    border-color: var(--owc-danger);
+  }
+  .tip.card.passed {
+    border-style: dashed;
+    box-shadow: none;
+  }
+  .tip.card.passed > :not(.hp-h) {
+    opacity: 0.55;
+  }
+  .tip.card b.l0 {
+    color: var(--owc-accent-text);
+  }
+  .tip.card b.l1 {
+    color: var(--owc-amber-text);
+  }
+  .tip.card b.l2 {
+    color: var(--owc-red-text);
+  }
+  .tip.card b.l3 {
+    color: var(--owc-danger-text);
+  }
+  .hp-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--owc-text-2);
+  }
+  .hp-h b {
+    font-size: 14px;
+    color: var(--owc-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .passed .hp-h b {
+    color: var(--owc-text-2);
+  }
+  .hp-h .pill {
+    margin-right: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--owc-soft);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hp-v {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .hp-v .vi {
+    flex: 0 0 auto;
+    display: inline-flex;
+    margin-top: 1px;
+  }
+  .hp-v .vi.l0 {
+    color: var(--owc-accent-text);
+  }
+  .hp-v .vi.l1 {
+    color: var(--owc-amber-text);
+  }
+  .hp-v .vi.l2 {
+    color: var(--owc-red-text);
+  }
+  /* Dangerous: full-bleed red band. */
+  .hp-v.band {
+    margin: 0 -13px;
+    padding: 7px 13px;
+    background: var(--owc-danger);
+    color: #fff;
+  }
+  .hp-v.band .vi,
+  .hp-v.band b.l3,
+  .hp-v.band .cloth,
+  .hp-v.band .cloth b {
+    color: #fff;
+  }
+  .cloth {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    font-size: 11.5px;
+    color: var(--owc-text-2);
+  }
+  .cloth svg {
+    flex: 0 0 auto;
+  }
+  .cloth b {
+    font-weight: 600;
+    color: var(--owc-text);
+  }
+  .hp-icy {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--owc-ice) 14%, transparent);
+    color: var(--owc-ice);
+    font-size: 11.5px;
+    line-height: 1.3;
+  }
+  .hp-icy svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+  }
+  .hp-s {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .hp-r,
+  .hp-w .top {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--owc-text-2);
+  }
+  .hp-r {
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: var(--owc-soft);
+  }
+  .hp-r .lb {
+    flex: 1 1 auto;
+  }
+  .hp-r .n {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--owc-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .hp-r .n small {
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .hp-r .n.ice {
+    color: var(--owc-ice);
+  }
+  .hp-r.l0 {
+    background: color-mix(in srgb, var(--owc-accent) 10%, transparent);
+  }
+  .hp-r.l0 .n {
+    color: var(--owc-accent-text);
+  }
+  .hp-r.l1 {
+    background: color-mix(in srgb, var(--owc-amber) 12%, transparent);
+  }
+  .hp-r.l1 .n {
+    color: var(--owc-amber-text);
+  }
+  .hp-r.l2 {
+    background: color-mix(in srgb, var(--owc-red) 13%, transparent);
+  }
+  .hp-r.l2 .n {
+    color: var(--owc-red-text);
+  }
+  .hp-r.l3 {
+    background: var(--owc-danger);
+  }
+  .hp-r.l3,
+  .hp-r.l3 .n {
+    color: #fff;
+  }
+  .hp-w {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+  }
+  .hp-w .sub {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .hp-w .dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-weight: 600;
+  }
+  .hp-w .dir .arr {
+    display: inline-flex;
+  }
+  /* Arrow points the way the wind pushes: up = tailwind. Graded for the ride. */
+  .hp-w .dir.tail {
+    color: var(--owc-accent-text);
+  }
+  .hp-w .dir.head {
+    color: var(--owc-amber-text);
+  }
+  .hp-w .dir.head .arr {
+    transform: rotate(180deg);
+  }
+  .hp-w .dir.cross .arr {
+    transform: rotate(90deg);
+  }
+  /* Dangerous: direction is a footnote, not good news. */
+  .hp-r.l3 .dir {
+    color: rgba(255, 255, 255, 0.75);
+  }
+  /* Day popover */
+  .tip.card.dp {
+    width: 240px;
+  }
+  .dp-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--owc-text-2);
+  }
+  .dp-h b {
+    display: block;
+    font-size: 14px;
+    color: var(--owc-text);
+  }
+  .dp-h .tt {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-variant-numeric: tabular-nums;
+  }
+  .dp-h .tt b {
+    display: inline;
+    font-size: inherit;
+    font-weight: 600;
+  }
+  .dp-n {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--owc-text-2);
+  }
+  .chero.mini {
+    margin-top: 0;
+    padding: 9px 10px;
+    gap: 10px;
+    border-radius: 10px;
+    align-items: flex-start;
+    font-weight: 400;
+    letter-spacing: normal;
+  }
+  .chero.mini .gbadge {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    font-size: 20px;
+  }
+  .chero.mini .t {
+    margin-top: 1px;
+    font-size: 14px;
+  }
+  .chero.mini .d {
+    margin-top: 1px;
+    font-size: 11.5px;
+  }
+  .chero .cloth {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+  .chero.mini .cloth {
+    margin-top: 4px;
+    font-size: 11.5px;
+  }
+  /* Tappable grade badge in day rows */
+  .gbadge.tap {
+    cursor: pointer;
+    transition:
+      box-shadow 0.12s,
+      transform 0.12s;
+  }
+  .gbadge.tap:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 2px var(--ha-card-background, var(--card-background-color, #1d222c)),
+      0 0 0 3.5px var(--owc-text-2);
+  }
+  .gbadge.tap:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--ha-card-background, var(--card-background-color, #1d222c)),
+      0 0 0 3.5px var(--owc-text);
+  }
+  /* Outlook marker: icon replaces the word; the row stays faded. */
+  .nt.far {
+    display: flex;
+    margin-top: 2px;
+    color: var(--owc-text-2);
+  }
+  .row .cell.l .nt.far {
+    margin-top: 0;
+  }
+  .far-slot {
+    height: 14px;
+    display: flex;
+    align-items: center;
+    color: var(--owc-text-2);
+  }
+  .pop .grades.cl span:first-child,
+  .pop .grades.cl .mono {
+    white-space: nowrap;
+  }
 `;

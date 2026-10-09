@@ -68,6 +68,25 @@ export const icons = {
       svg`<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h15a3 3 0 1 1-3 3"/><path d="M3 18h7"/>`,
       s,
     ),
+  /** clothing: jacket */
+  shirt: (s = 12) =>
+    wrap(
+      svg`<path d="M8.3 3.8 3 6.8l2 4.5L7.5 10.2V20.3h9V10.2l2.5 1.1 2-4.5-5.3-3a3.8 3.8 0 0 1-7.4 0Z"/>`,
+      s,
+    ),
+  thermo: (s = 12) =>
+    wrap(
+      svg`<path d="M9.8 3.8v11a3.8 3.8 0 1 0 4.4 0v-11a2.2 2.2 0 0 0-4.4 0Z"/><path d="M12 9v7.5"/>`,
+      s,
+    ),
+  /** wind direction relative to the ride: points the way the wind pushes (up = tailwind) */
+  dirArrow: (s = 11) => wrap(svg`<path d="M12 21V3"/><path d="M5.3 9.8 12 3l6.8 6.8"/>`, s),
+  /** outlook: forecast may still change */
+  uncertain: (s = 12) =>
+    wrap(
+      svg`<path d="M6.8 20.3A4.8 4.8 0 0 1 6 10.8a6 6 0 0 1 11.7-1.2 4.5 4.5 0 0 1-.4 10.7Z"/><path d="M9.9 12.5a2.2 2.2 0 1 1 3.2 2.1c-.7.3-1.1.7-1.1 1.5"/><path d="M12 18.3v.1"/>`,
+      s,
+    ),
 } satisfies Record<string, Icon>;
 
 /** Pick an icon for a task by name; falls back to a generic check. */
