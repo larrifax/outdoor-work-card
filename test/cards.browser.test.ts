@@ -1,9 +1,8 @@
 import { test, expect } from "vitest";
-import { page } from "vitest/browser";
 import { mountThemed } from "./harness";
 
 for (const theme of ["dark", "light"] as const) {
-  test(`renders and screenshots all cards in ${theme} mode`, async () => {
+  test(`renders all cards in ${theme} mode`, async () => {
     const host = await mountThemed(theme);
     const cards = host.querySelectorAll("outdoor-work-card");
     expect(cards.length).toBe(6);
@@ -92,22 +91,5 @@ for (const theme of ["dark", "light"] as const) {
       (c.shadowRoot!.textContent ?? "").replace(/\s+/g, " ").trim(),
     );
     expect(text).toMatchSnapshot();
-
-    await page.screenshot({ element: host, path: `__screenshots__/cards-${theme}.png` });
-
-    // Commute popovers open: today's dangerous 17:00 hour, then Monday's day popover (outlook, warm layer).
-    // Hint popovers close each other, so one capture each: the commute card alone, with room above for the popover.
-    for (const c of cards) if (c !== cards[5]) (c as HTMLElement).style.display = "none";
-    (cards[5] as HTMLElement).style.paddingTop = "300px";
-    const open = async (el: Element | undefined, name: string) => {
-      const tip = (el as HTMLElement).querySelector<HTMLElement>(":scope > .tip")!;
-      tip.showPopover();
-      await new Promise((r) => setTimeout(r, 250));
-      await page.screenshot({ element: host, path: `__screenshots__/${name}-${theme}.png` });
-      tip.hidePopover();
-    };
-    const tiles = cRoot.querySelectorAll(".crow:first-child .tile");
-    await open(tiles[3], "hour-popover");
-    await open(cRoot.querySelectorAll(".crow > .gbadge")[3], "day-popover");
   });
 }

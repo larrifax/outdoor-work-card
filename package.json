@@ -15,11 +15,13 @@
     "build": "vite build",
     "watch": "vite build --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --project browser",
     "lint": "oxlint",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:visual": "vitest run --project visual",
+    "test:visual:update": "vitest run --project visual --update"
   },
   "dependencies": {
     "lit": "^3.3.3"
