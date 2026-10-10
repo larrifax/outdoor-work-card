@@ -1,4 +1,4 @@
-// Shared setup for the browser tests: frozen clock, offline Open-Meteo, themed card grid.
+// Shared setup for the browser tests: frozen clock, offline Open-Meteo, one themed card per test.
 import { beforeAll, afterAll, expect, onTestFinished } from "vitest";
 import { page } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
@@ -46,32 +46,35 @@ afterAll(() => {
 });
 
 const hass = { config: { latitude: 59.91, longitude: 10.75, time_zone: "Europe/Oslo" } };
-const configs = [
-  { type: "custom:outdoor-work-card", mode: "work" },
-  {
+
+// Every card the tests render; the key names test cases and screenshot baselines.
+export const CARDS = {
+  work: { type: "custom:outdoor-work-card", mode: "work" },
+  "work-rainy": {
     type: "custom:outdoor-work-card",
     mode: "work",
     latitude: 59.92,
     title: "Outdoor Work (rainy week)",
   },
-  {
+  "carwash-tonight": {
     type: "custom:outdoor-work-card",
     mode: "carwash",
     latitude: 59.9,
     title: "Car Wash (wash tonight)",
   },
-  { type: "custom:outdoor-work-card", mode: "carwash" },
-  {
+  carwash: { type: "custom:outdoor-work-card", mode: "carwash" },
+  "carwash-rainy": {
     type: "custom:outdoor-work-card",
     mode: "carwash",
     latitude: 59.92,
     title: "Car Wash (rainy week)",
   },
-  { type: "custom:outdoor-work-card", mode: "commute", latitude: 59.93 },
-];
+  commute: { type: "custom:outdoor-work-card", mode: "commute", latitude: 59.93 },
+} as const;
+export type CardName = keyof typeof CARDS;
 
 // HA-ish theme vars per appearance (mirrors the old harness.html).
-const THEMES = {
+export const THEMES = {
   dark: {
     background: "#0d1117",
     "--primary-text-color": "#e8eaed",
@@ -89,37 +92,30 @@ const THEMES = {
     "--ha-card-border-radius": "16px",
   },
 } as const;
+export type Theme = keyof typeof THEMES;
 
-/** Mounts all six cards themed; by default the "How … judged" popover is open on the first work and carwash card. */
-export async function mountThemed(theme: keyof typeof THEMES, { info = true } = {}) {
+/** Mounts one themed card and waits until it has rendered its forecast. Returns a locator for its frame. */
+export async function mountCard(name: CardName, theme: Theme = "dark") {
   const host = document.createElement("div");
-  host.style.cssText =
-    "padding:24px;font-family:Roboto,system-ui,sans-serif;display:grid;grid-template-columns:repeat(2,480px);gap:24px";
+  // Commute popovers open upward and past the card's right edge; give them room inside the shot.
+  const pad = name === "commute" ? "300px 120px 24px 24px" : "24px";
+  host.style.cssText = `padding:${pad};width:480px;font-family:Roboto,system-ui,sans-serif`;
   for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
-  host.dataset["testid"] = `cards-${theme}`;
+  host.dataset["testid"] = `${name}-${theme}`;
   document.body.appendChild(host);
   onTestFinished(() => host.remove());
 
-  for (const c of configs) {
-    const el = document.createElement("outdoor-work-card") as HTMLElement & {
-      setConfig: (c: object) => void;
-      hass: unknown;
-    };
-    el.setConfig(c);
-    host.appendChild(el);
-    el.hass = hass;
-  }
-  const grid = page.getByTestId(`cards-${theme}`);
-  // Settled once every card has rendered (info button) and none is still fetching.
-  const infoBtns = grid.getByRole("button", { name: /^How / });
-  const fetching = grid.getByText(/^Fetching forecast/);
-  await expect
-    .poll(() => infoBtns.elements().length === configs.length && !fetching.query())
-    .toBe(true);
+  const el = document.createElement("outdoor-work-card") as HTMLElement & {
+    setConfig: (c: object) => void;
+    hass: unknown;
+  };
+  el.setConfig(CARDS[name]);
+  host.appendChild(el);
+  el.hass = hass;
 
-  // Design F: capture the info popover open on one work + one carwash card.
-  if (!info) return grid;
-  await grid.getByRole("button", { name: "How days are judged" }).first().click();
-  await grid.getByRole("button", { name: "How evenings are judged" }).nth(1).click();
-  return grid;
+  const frame = page.getByTestId(`${name}-${theme}`);
+  // Settled once the card has rendered (info button) and is no longer fetching.
+  await expect.element(frame.getByRole("button", { name: /^How / })).toBeVisible();
+  await expect.element(frame.getByText(/^Fetching forecast/)).not.toBeInTheDocument();
+  return frame;
 }

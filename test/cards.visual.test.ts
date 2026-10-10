@@ -1,28 +1,38 @@
 import { test, expect } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { mountThemed } from "./harness";
+import { userEvent, type Locator } from "vitest/browser";
+import { CARDS, THEMES, mountCard, type CardName, type Theme } from "./harness";
 
-// Pixel baselines; run via `pnpm test:visual` so Chromium comes from the pinned Docker image.
-for (const theme of ["dark", "light"] as const) {
-  test(`cards look right in ${theme} mode`, async () => {
-    const grid = await mountThemed(theme);
-    await expect.element(grid).toMatchScreenshot(`cards-${theme}`);
+// Clicking the "How … judged" button opens a dialog; hovering a trigger opens its hint tooltip.
+const click = (name: string) => async (frame: Locator) => {
+  const btn = frame.getByRole("button", { name });
+  await userEvent.click(btn);
+  await expect.element(frame.getByRole("dialog")).toBeVisible();
+  return () => userEvent.click(btn);
+};
+const hover = (name: string | RegExp) => async (frame: Locator) => {
+  const target = frame.getByRole("button", { name }).first();
+  await userEvent.hover(target);
+  await expect.element(frame.getByRole("tooltip")).toBeVisible();
+  return () => userEvent.unhover(target);
+};
 
-    // Commute popovers: today's dangerous 17:00 hour, then Monday's day popover (outlook, warm layer).
-    // The commute card alone, with room above for the popover.
-    const commute = grid.element().lastElementChild as HTMLElement;
-    const host = grid.element() as HTMLElement;
-    host.replaceChildren(commute);
-    commute.style.paddingTop = "300px";
-    // Rows run today first, so .first() is today's hour.
-    const open = async (name: string | RegExp, shot: string) => {
-      const target = page.getByRole("button", { name }).first();
-      await userEvent.hover(target);
-      await expect.element(page.getByRole("tooltip")).toBeVisible();
-      await expect.element(grid).toMatchScreenshot(`${shot}-${theme}`);
-      await userEvent.unhover(target);
-    };
-    await open("Home 17:00", "hour-popover");
-    await open(/^Monday 21:/, "day-popover");
-  });
-}
+// Popover states captured after each card's plain shot, keyed by baseline suffix.
+const STATES: Partial<Record<CardName, Record<string, ReturnType<typeof click>>>> = {
+  work: { info: click("How days are judged") },
+  carwash: { info: click("How evenings are judged") },
+  // Today's dangerous 17:00 hour, then Monday's day popover (outlook, warm layer).
+  commute: { "hour-popover": hover("Home 17:00"), "day-popover": hover(/^Monday 21: /) },
+};
+
+// Pixel baselines, one test per card and theme; run via `pnpm test:visual` so Chromium comes from the pinned Docker image.
+for (const name of Object.keys(CARDS) as CardName[])
+  for (const theme of Object.keys(THEMES) as Theme[])
+    test(`${name} card looks right in ${theme} mode`, async () => {
+      const frame = await mountCard(name, theme);
+      await expect.element(frame).toMatchScreenshot(`${name}-${theme}`);
+      for (const [state, open] of Object.entries(STATES[name] ?? {})) {
+        const close = await open(frame);
+        await expect.element(frame).toMatchScreenshot(`${name}-${state}-${theme}`);
+        await close();
+      }
+    });
