@@ -1,6 +1,11 @@
 // Standalone dev page: the real card with live Open-Meteo data and a fake `hass`.
 // Importing the entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
+// Roboto as Home Assistant loads it (dev only; HA provides it in production).
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/600.css";
+import "@fontsource/roboto/700.css";
 
 // Minimal <ha-card> so the card renders outside Home Assistant (same trick as the screenshot test).
 if (!customElements.get("ha-card")) customElements.define("ha-card", class extends HTMLElement {});

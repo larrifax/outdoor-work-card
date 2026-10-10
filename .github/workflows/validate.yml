@@ -32,4 +32,6 @@ jobs:
       # Vitest browser mode drives real Chromium via Playwright.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
+      # Pixel baselines: Chromium in the pinned Playwright Docker image.
+      - run: pnpm test:visual
       - run: pnpm build

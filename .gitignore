@@ -7,4 +7,3 @@ dist
 .claude/
 .vitest/
 
-test/__screenshots__/
