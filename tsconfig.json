@@ -19,7 +19,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "esnext",
-    "types": [],
+    "types": ["vite/client"],
     "useDefineForClassFields": false,
     "verbatimModuleSyntax": true
   },

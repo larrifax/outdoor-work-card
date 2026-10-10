@@ -47,6 +47,7 @@ import {
 import { icons, taskIcon } from "./icons";
 import { strings, type Strings, type WashKind } from "./i18n";
 import { styles } from "./styles";
+import { loadMonoFont } from "./mono-font";
 import "./editor";
 
 const VERSION = "2.1.0";
@@ -122,6 +123,7 @@ export class OutdoorWorkCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    loadMonoFont();
     this._tickTimer = window.setInterval(() => (this._tick = (this._tick + 1) % 1e6), 5 * 60_000);
     document.addEventListener("visibilitychange", this._onVisible);
     this._maybeLoad(false);

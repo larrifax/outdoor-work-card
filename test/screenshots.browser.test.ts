@@ -2,7 +2,32 @@ import { test, expect, beforeAll, afterAll } from "vitest";
 import { page } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
+import { MONO_FAMILY, loadMonoFont } from "../src/mono-font";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/600.css";
+import "@fontsource/roboto/700.css";
 import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
+
+// Fonts: Roboto as Home Assistant loads it, and the card's bundled mono face. Load every weight
+// the card uses before the first render so screenshots don't catch a fallback or the swap.
+beforeAll(async () => {
+  const weights = ["400", "500", "600", "700"];
+  await Promise.all(weights.map((w) => document.fonts.load(`${w} 16px Roboto`)));
+  // load() falls back to the nearest weight, so check each exact weight got a face of its own.
+  const loaded = new Set(
+    [...document.fonts]
+      .filter((f) => f.family === "Roboto" && f.status === "loaded")
+      .map((f) => f.weight),
+  );
+  expect(
+    weights.filter((w) => !loaded.has(w)),
+    "Roboto weights missing",
+  ).toEqual([]);
+  loadMonoFont();
+  const [mono] = await document.fonts.load(`16px "${MONO_FAMILY}"`);
+  expect(mono?.status, "bundled mono font loaded").toBe("loaded");
+});
 
 // Minimal <ha-card> so the bundle renders outside Home Assistant.
 beforeAll(() => {
