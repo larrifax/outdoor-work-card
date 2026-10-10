@@ -11,7 +11,7 @@ export const styles = css`
     --owc-line: color-mix(in srgb, var(--owc-text) 9%, transparent);
     --owc-soft: color-mix(in srgb, var(--owc-text) 4%, transparent);
     --owc-dim: color-mix(in srgb, var(--owc-text) 20%, transparent);
-    --owc-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --owc-mono: "OWC Roboto Mono", monospace;
     /* Text variants: mixed toward the theme text colour so they stay legible on light themes. */
     --owc-accent-text: color-mix(in srgb, var(--owc-accent) 70%, var(--owc-text));
     --owc-amber-text: color-mix(in srgb, var(--owc-amber) 62%, var(--owc-text));

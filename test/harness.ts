@@ -3,6 +3,7 @@ import { beforeAll, afterAll, expect, onTestFinished } from "vitest";
 import { page, userEvent } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
+import { MONO_FAMILY, loadMonoFont } from "../src/mono-font";
 // Roboto as Home Assistant loads it, so screenshots use the font the card gets in HA.
 import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
@@ -25,6 +26,10 @@ beforeAll(async () => {
     weights.filter((w) => !loaded.has(w)),
     "Roboto weights missing",
   ).toEqual([]);
+  // The card bundles its mono font; register and load it now so the first shot doesn't catch the swap.
+  loadMonoFont();
+  const [mono] = await document.fonts.load(`16px "${MONO_FAMILY}"`);
+  expect(mono?.status, "bundled mono font loaded").toBe("loaded");
   if (!customElements.get("ha-card"))
     customElements.define("ha-card", class extends HTMLElement {});
 });
