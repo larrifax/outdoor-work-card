@@ -1,6 +1,6 @@
 // Shared setup for the browser tests: frozen clock, offline Open-Meteo, one themed card per test.
 import { beforeAll, afterAll, expect, onTestFinished } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
 import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
@@ -97,9 +97,7 @@ export type Theme = keyof typeof THEMES;
 /** Mounts one themed card and waits until it has rendered its forecast. Returns a locator for its frame. */
 export async function mountCard(name: CardName, theme: Theme = "dark") {
   const host = document.createElement("div");
-  // Commute popovers open upward and past the card's right edge; give them room inside the shot.
-  const pad = name === "commute" ? "300px 120px 24px 24px" : "24px";
-  host.style.cssText = `padding:${pad};width:480px;font-family:Roboto,system-ui,sans-serif`;
+  host.style.cssText = "padding:24px;width:480px;font-family:Roboto,system-ui,sans-serif";
   for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
   host.dataset["testid"] = `${name}-${theme}`;
   document.body.appendChild(host);
@@ -117,5 +115,7 @@ export async function mountCard(name: CardName, theme: Theme = "dark") {
   // Settled once the card has rendered (info button) and is no longer fetching.
   await expect.element(frame.getByRole("button", { name: /^How / })).toBeVisible();
   await expect.element(frame.getByText(/^Fetching forecast/)).not.toBeInTheDocument();
+  // The mouse stays where the previous test left it; park it in the empty padding so nothing shows hover.
+  await userEvent.hover(frame, { position: { x: 2, y: 2 } });
   return frame;
 }
