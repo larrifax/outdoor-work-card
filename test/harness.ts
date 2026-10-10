@@ -3,10 +3,17 @@ import { beforeAll, afterAll, expect, onTestFinished } from "vitest";
 import { page, userEvent } from "vitest/browser";
 // Importing entry registers <outdoor-work-card> as a side effect.
 import "../src/outdoor-work-card";
+// Roboto as Home Assistant loads it, so screenshots use the font the card gets in HA.
+import "@fontsource-variable/roboto";
 import { COMMUTE, GOOD, RAINY, TONIGHT } from "./fixtures/example";
 
 // Minimal <ha-card> so the bundle renders outside Home Assistant.
-beforeAll(() => {
+beforeAll(async () => {
+  // Font faces load lazily; fetch every weight the card uses before the first render.
+  await Promise.all(
+    [400, 500, 600, 700].map((w) => document.fonts.load(`${w} 16px "Roboto Variable"`)),
+  );
+  expect(document.fonts.check('16px "Roboto Variable"'), "Roboto loaded").toBe(true);
   if (!customElements.get("ha-card"))
     customElements.define("ha-card", class extends HTMLElement {});
 });
@@ -97,7 +104,8 @@ export type Theme = keyof typeof THEMES;
 /** Mounts one themed card and waits until it has rendered its forecast. Returns a locator for its frame. */
 export async function mountCard(name: CardName, theme: Theme = "dark") {
   const host = document.createElement("div");
-  host.style.cssText = "padding:24px;width:480px;font-family:Roboto,system-ui,sans-serif";
+  host.style.cssText =
+    "padding:24px;width:480px;font-family:Roboto,'Roboto Variable',system-ui,sans-serif";
   for (const [k, v] of Object.entries(THEMES[theme])) host.style.setProperty(k, v);
   host.dataset["testid"] = `${name}-${theme}`;
   document.body.appendChild(host);
